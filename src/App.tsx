@@ -6,79 +6,17 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  slots as SLOTS,
+  roster as ROSTER,
+  signs as SIGNS,
+  whispers as WHISPERS,
+  POOL,
+} from './artists'
 
 /* ============================================================
-   DATA
+   KEY SPOTS — where the recurring key drifts
    ============================================================ */
-
-type Depth = {
-  line: string
-  caption: string
-  image: string
-}
-
-const depths: Depth[] = [
-  {
-    line: 'You are still here.',
-    caption: 'Depth 01 · The surface was never the surface',
-    image:
-      'https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=2200&q=85',
-  },
-  {
-    line: 'The water remembers your name.',
-    caption: 'Depth 02 · Something is swimming with you',
-    image:
-      'https://images.unsplash.com/photo-1551244072-5d12893278ab?auto=format&fit=crop&w=2200&q=85',
-  },
-  {
-    line: 'There is a room down here.',
-    caption: 'Depth 03 · Its lights are on',
-    image:
-      'https://images.unsplash.com/photo-1530053969600-caed2596d242?auto=format&fit=crop&w=2200&q=85',
-  },
-  {
-    line: 'Someone left the door open.',
-    caption: "Depth 04 · You've been here before",
-    image:
-      'https://images.unsplash.com/photo-1518877593221-1f28583780b4?auto=format&fit=crop&w=2200&q=85',
-  },
-  {
-    line: 'Keep going.',
-    caption: 'Depth 05 · It gets warmer',
-    image:
-      'https://images.unsplash.com/photo-1468581264429-2548ef9eb732?auto=format&fit=crop&w=2200&q=85',
-  },
-  {
-    line: "You've reached the bottom.",
-    caption: 'Depth 06 · There is no bottom',
-    image:
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=2200&q=85',
-  },
-]
-
-const SIGNS = [
-  'NO DIVING',
-  'POOL HOURS · 06:00 – 04:00',
-  'CAPACITY · 12',
-  'NO RUNNING',
-  'CURRENT · 1',
-  'NO LEAVING',
-]
-
-const WHISPERS = [
-  'the tile was warm',
-  'someone was counting',
-  'the light hummed back',
-  'it knows your name now',
-  "don't turn around",
-]
-
-const GUEST_LOG = [
-  { name: 'AMY L.', date: '07 / 14 / 1998', note: 'depth 4' },
-  { name: 'M. KOWALSKI', date: '06 / 02 / 2001', note: 'never came back' },
-  { name: 'T. —', date: '11 / 23 / 2087', note: 'left a key' },
-  { name: 'J. & J.', date: '03 / 03 / 2019', note: 'still swimming' },
-]
 
 const KEY_SPOTS: Record<number, React.CSSProperties> = {
   1: {
@@ -104,11 +42,11 @@ const KEY_SPOTS: Record<number, React.CSSProperties> = {
   } as React.CSSProperties,
 }
 
-const TOTAL_DEPTHS = depths.length
+const TOTAL_DEPTHS = SLOTS.length
 const ABACUS_NAMESPACE = 'the-pool-at-night-liminal'
 
 /* ============================================================
-   AUDIO ENGINE — shared across all events
+   AUDIO ENGINE
    ============================================================ */
 
 type AudioBus = {
@@ -121,7 +59,6 @@ type AudioBus = {
   underwaterFilter: BiquadFilterNode
 }
 
-/* --- synthesize a reverb impulse response (noise with decay) --- */
 const createReverbIR = (ctx: AudioContext, duration = 3.2, decay = 2.4) => {
   const rate = ctx.sampleRate
   const length = Math.floor(rate * duration)
@@ -136,7 +73,6 @@ const createReverbIR = (ctx: AudioContext, duration = 3.2, decay = 2.4) => {
   return impulse
 }
 
-/* --- a chunk of filtered pink-ish noise, for the water bed --- */
 const createNoiseBuffer = (ctx: AudioContext, seconds = 4) => {
   const rate = ctx.sampleRate
   const length = Math.floor(rate * seconds)
@@ -145,7 +81,6 @@ const createNoiseBuffer = (ctx: AudioContext, seconds = 4) => {
   let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
-    // simple pink-ish noise via cascaded lowpass
     b0 = 0.99886 * b0 + white * 0.0555179
     b1 = 0.99332 * b1 + white * 0.0750759
     b2 = 0.96900 * b2 + white * 0.1538520
@@ -158,11 +93,9 @@ const createNoiseBuffer = (ctx: AudioContext, seconds = 4) => {
   return buffer
 }
 
-/* --- build the entire audio graph once --- */
 const buildAudio = (): AudioBus => {
   const ctx = new AudioContext()
 
-  // destination chain: master → underwater lowpass → panner → out
   const master = ctx.createGain()
   master.gain.value = 0
 
@@ -176,7 +109,6 @@ const buildAudio = (): AudioBus => {
 
   master.connect(underwater).connect(panner).connect(ctx.destination)
 
-  // ---- reverb bus ----
   const convolver = ctx.createConvolver()
   convolver.buffer = createReverbIR(ctx, 3.2, 2.4)
   convolver.normalize = true
@@ -189,7 +121,6 @@ const buildAudio = (): AudioBus => {
   reverbReturn.gain.value = 0.55
   convolver.connect(reverbReturn).connect(master)
 
-  // ---- the hum — 5 oscillators, detuned, lowpassed, breathing ----
   const hum = ctx.createGain()
   hum.gain.value = 1
 
@@ -200,7 +131,6 @@ const buildAudio = (): AudioBus => {
 
   hum.connect(humFilter)
 
-  // slow LFO on the filter cutoff — makes the hum breathe
   const lfo = ctx.createOscillator()
   lfo.type = 'sine'
   lfo.frequency.value = 0.06
@@ -209,13 +139,7 @@ const buildAudio = (): AudioBus => {
   lfo.connect(lfoAmt).connect(humFilter.frequency)
   lfo.start()
 
-  // individual oscillators
-  const makeOsc = (
-    type: OscillatorType,
-    freq: number,
-    level: number,
-    detune = 0,
-  ) => {
+  const makeOsc = (type: OscillatorType, freq: number, level: number, detune = 0) => {
     const o = ctx.createOscillator()
     o.type = type
     o.frequency.value = freq
@@ -224,17 +148,15 @@ const buildAudio = (): AudioBus => {
     g.gain.value = level
     o.connect(g).connect(hum)
     o.start()
-    return o
   }
 
-  makeOsc('sine', 30, 0.55) // sub — presence
-  makeOsc('sine', 40, 0.75) // deep body
-  makeOsc('sine', 55, 0.6) // fundamental
-  makeOsc('sine', 55.25, 0.45) // detuned twin — creates slow beating
-  makeOsc('triangle', 82.4, 0.28) // overtone
-  makeOsc('sine', 110, 0.14) // warmth
+  makeOsc('sine', 30, 0.55)
+  makeOsc('sine', 40, 0.75)
+  makeOsc('sine', 55, 0.6)
+  makeOsc('sine', 55.25, 0.45)
+  makeOsc('triangle', 82.4, 0.28)
+  makeOsc('sine', 110, 0.14)
 
-  // dry + wet send for the hum
   const humDry = ctx.createGain()
   humDry.gain.value = 0.16
   humFilter.connect(humDry).connect(master)
@@ -243,7 +165,6 @@ const buildAudio = (): AudioBus => {
   humWet.gain.value = 0.42
   humFilter.connect(humWet).connect(reverbSend)
 
-  // ---- water bed — filtered pink noise with slow tremolo ----
   const waterSrc = ctx.createBufferSource()
   waterSrc.buffer = createNoiseBuffer(ctx, 6)
   waterSrc.loop = true
@@ -256,7 +177,6 @@ const buildAudio = (): AudioBus => {
   const waterGain = ctx.createGain()
   waterGain.gain.value = 0.05
 
-  // slow LFO on the water amp — waves
   const waterLFO = ctx.createOscillator()
   waterLFO.type = 'sine'
   waterLFO.frequency.value = 0.09
@@ -267,14 +187,12 @@ const buildAudio = (): AudioBus => {
 
   waterSrc.connect(waterFilter).connect(waterGain).connect(master)
 
-  // slight reverb on the water too
   const waterWet = ctx.createGain()
   waterWet.gain.value = 0.35
   waterFilter.connect(waterWet).connect(reverbSend)
 
   waterSrc.start()
 
-  // ---- events bus ----
   const events = ctx.createGain()
   events.gain.value = 1
 
@@ -286,47 +204,48 @@ const buildAudio = (): AudioBus => {
   eventsWet.gain.value = 0.7
   events.connect(eventsWet).connect(reverbSend)
 
-  return { ctx, master, events, hum, reverbSend, reverbReturn, underwaterFilter: underwater }
+  return {
+    ctx,
+    master,
+    events,
+    hum,
+    reverbSend,
+    reverbReturn,
+    underwaterFilter: underwater,
+  }
 }
 
 /* ============================================================
    EVENT SOUNDS
    ============================================================ */
 
-/* A bell-like drip — two detuned sine partials with exponential decay */
 const playDrip = (bus: AudioBus) => {
   const { ctx, events } = bus
   const t = ctx.currentTime
-
   const partials = [
     { f: 1320, gain: 0.5, decay: 0.9 },
     { f: 880, gain: 0.35, decay: 0.7 },
     { f: 440, gain: 0.18, decay: 0.5 },
   ]
-
   for (const p of partials) {
     const osc = ctx.createOscillator()
     osc.type = 'sine'
     osc.frequency.setValueAtTime(p.f * 1.35, t)
     osc.frequency.exponentialRampToValueAtTime(p.f, t + 0.06)
-
     const g = ctx.createGain()
     g.gain.setValueAtTime(0.0001, t)
     g.gain.exponentialRampToValueAtTime(p.gain, t + 0.006)
     g.gain.exponentialRampToValueAtTime(0.0001, t + p.decay)
-
     osc.connect(g).connect(events)
     osc.start(t)
     osc.stop(t + p.decay + 0.05)
   }
 }
 
-/* A splash — layered: low boom + mid burst + high scatter */
 const playSplash = (bus: AudioBus) => {
   const { ctx, events } = bus
   const t = ctx.currentTime
 
-  // low boom
   const boom = ctx.createOscillator()
   boom.type = 'sine'
   boom.frequency.setValueAtTime(90, t)
@@ -339,7 +258,6 @@ const playSplash = (bus: AudioBus) => {
   boom.start(t)
   boom.stop(t + 0.75)
 
-  // mid noise burst
   const midDur = 0.9
   const midBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * midDur), ctx.sampleRate)
   const midData = midBuf.getChannelData(0)
@@ -358,7 +276,6 @@ const playSplash = (bus: AudioBus) => {
   mid.connect(midFilter).connect(midG).connect(events)
   mid.start(t)
 
-  // high scatter — brief hiss on top
   const hiDur = 0.35
   const hiBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * hiDur), ctx.sampleRate)
   const hiData = hiBuf.getChannelData(0)
@@ -377,12 +294,9 @@ const playSplash = (bus: AudioBus) => {
   hi.start(t)
 }
 
-/* A distant laugh — formant pulses through heavy reverb */
 const playMuffledLaugh = (bus: AudioBus) => {
   const { ctx, events } = bus
   const t = ctx.currentTime
-
-  // 8 short vowel-ish pulses, like "ha ha ha" filtered through water
   const pulses = [
     { t: 0.00, f: 240, dur: 0.18 },
     { t: 0.20, f: 220, dur: 0.16 },
@@ -393,16 +307,12 @@ const playMuffledLaugh = (bus: AudioBus) => {
     { t: 1.26, f: 275, dur: 0.16 },
     { t: 1.46, f: 235, dur: 0.22 },
   ]
-
   for (const p of pulses) {
     const start = t + p.t
-
-    // carrier — sine with fast pitch wobble (vibrato) for a vocal feel
     const carrier = ctx.createOscillator()
     carrier.type = 'sine'
     carrier.frequency.setValueAtTime(p.f, start)
 
-    // vibrato
     const vib = ctx.createOscillator()
     vib.type = 'sine'
     vib.frequency.value = 42
@@ -412,7 +322,6 @@ const playMuffledLaugh = (bus: AudioBus) => {
     vib.start(start)
     vib.stop(start + p.dur)
 
-    // vowel-ish bandpass — "ah" formant
     const formant = ctx.createBiquadFilter()
     formant.type = 'bandpass'
     formant.frequency.value = 620
@@ -429,8 +338,12 @@ const playMuffledLaugh = (bus: AudioBus) => {
   }
 }
 
-/* A heartbeat thump — sine with fast pitch drop + a soft click */
-const heartbeatThump = (bus: AudioBus, dest: AudioNode, delay: number, amp: number) => {
+const heartbeatThump = (
+  bus: AudioBus,
+  dest: AudioNode,
+  delay: number,
+  amp: number,
+) => {
   const { ctx } = bus
   const t = ctx.currentTime + delay
 
@@ -438,17 +351,14 @@ const heartbeatThump = (bus: AudioBus, dest: AudioNode, delay: number, amp: numb
   osc.type = 'sine'
   osc.frequency.setValueAtTime(88, t)
   osc.frequency.exponentialRampToValueAtTime(32, t + 0.18)
-
   const g = ctx.createGain()
   g.gain.setValueAtTime(0.0001, t)
   g.gain.linearRampToValueAtTime(amp, t + 0.012)
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32)
-
   osc.connect(g).connect(dest)
   osc.start(t)
   osc.stop(t + 0.36)
 
-  // faint click at the top — makes it physical
   const click = ctx.createOscillator()
   click.type = 'triangle'
   click.frequency.value = 180
@@ -525,8 +435,8 @@ function Particles() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx2d = canvas.getContext('2d')
-    if (!ctx2d) return
+    const c2d = canvas.getContext('2d')
+    if (!c2d) return
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     let raf = 0
@@ -566,9 +476,8 @@ function Particles() {
     for (let i = 0; i < 46; i++) particles.push(spawn(true))
 
     const tick = () => {
-      ctx2d.clearRect(0, 0, canvas.width, canvas.height)
+      c2d.clearRect(0, 0, canvas.width, canvas.height)
       if (particles.length < 70 && Math.random() < 0.02) particles.push(spawn())
-
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i]
         p.x += p.vx
@@ -584,10 +493,10 @@ function Particles() {
           p.hue === 34
             ? `rgba(240, 184, 120, ${alpha})`
             : `rgba(180, 215, 235, ${alpha})`
-        ctx2d.beginPath()
-        ctx2d.arc(p.x, p.y, p.r * dpr, 0, Math.PI * 2)
-        ctx2d.fillStyle = color
-        ctx2d.fill()
+        c2d.beginPath()
+        c2d.arc(p.x, p.y, p.r * dpr, 0, Math.PI * 2)
+        c2d.fillStyle = color
+        c2d.fill()
       }
       raf = requestAnimationFrame(tick)
     }
@@ -600,6 +509,29 @@ function Particles() {
   }, [])
 
   return <canvas ref={canvasRef} className="pool-particles" aria-hidden="true" />
+}
+
+/* ============================================================
+   VISITOR'S MARK
+   ============================================================ */
+
+type Mark = {
+  name: string
+  line: string
+  url: string
+  date: string
+}
+
+const readMark = (): Mark | null => {
+  try {
+    const raw = window.localStorage.getItem('pool-mark')
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Mark
+    if (!parsed.name || !parsed.line) return null
+    return parsed
+  } catch {
+    return null
+  }
 }
 
 /* ============================================================
@@ -629,6 +561,11 @@ export default function App() {
   const [stayToast, setStayToast] = useState(false)
   const [showDepthBreak, setShowDepthBreak] = useState(false)
 
+  const [mark, setMark] = useState<Mark | null>(() => readMark())
+  const [markName, setMarkName] = useState('')
+  const [markLine, setMarkLine] = useState('')
+  const [markUrl, setMarkUrl] = useState('')
+
   const busRef = useRef<AudioBus | null>(null)
   const pannerRef = useRef<StereoPannerNode | null>(null)
 
@@ -652,15 +589,14 @@ export default function App() {
   const keysBufferRef = useRef('')
   const depthBreakShownRef = useRef(false)
 
-  /* 1. Gradient shift on scroll */
+  /* 1. Gradient shift */
   useEffect(() => {
     const root = document.documentElement
     let frame = 0
     const update = () => {
       frame = 0
       const max = root.scrollHeight - window.innerHeight
-      const progress =
-        max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0
+      const progress = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0
       root.style.setProperty('--pool-shift', `${(progress * 100).toFixed(2)}%`)
     }
     const onScroll = () => {
@@ -692,14 +628,8 @@ export default function App() {
         const rect = section.getBoundingClientRect()
         const center = rect.top + rect.height / 2
         const offset = (center - vh / 2) / vh
-        section.style.setProperty(
-          '--parallax-slow',
-          `${(offset * 40).toFixed(2)}px`,
-        )
-        section.style.setProperty(
-          '--parallax-fast',
-          `${(offset * 70).toFixed(2)}px`,
-        )
+        section.style.setProperty('--parallax-slow', `${(offset * 40).toFixed(2)}px`)
+        section.style.setProperty('--parallax-fast', `${(offset * 70).toFixed(2)}px`)
       })
     }
     const onScroll = () => {
@@ -716,7 +646,7 @@ export default function App() {
     }
   }, [])
 
-  /* 3. Reveal depth sections */
+  /* 3. Reveal depths */
   useEffect(() => {
     const sections = Array.from(
       document.querySelectorAll<HTMLElement>('.depth-section'),
@@ -748,13 +678,11 @@ export default function App() {
     )
     sections.forEach((s) => observer.observe(s))
     return () => observer.disconnect()
-  }, [isReturnVisitor, bootPhase])
+  }, [isReturnVisitor, bootPhase, mark])
 
   /* 4. Whispers */
   useEffect(() => {
-    const whispers = Array.from(
-      document.querySelectorAll<HTMLElement>('.whisper'),
-    )
+    const whispers = Array.from(document.querySelectorAll<HTMLElement>('.whisper'))
     if (whispers.length === 0) return
     const observer = new IntersectionObserver(
       (entries) => {
@@ -766,7 +694,7 @@ export default function App() {
     )
     whispers.forEach((w) => observer.observe(w))
     return () => observer.disconnect()
-  }, [isReturnVisitor, bootPhase])
+  }, [isReturnVisitor, bootPhase, mark])
 
   /* 5. Cursor light */
   useEffect(() => {
@@ -798,7 +726,7 @@ export default function App() {
     }
   }, [])
 
-  /* 6. Stereo pan from pointer X */
+  /* 6. Stereo pan */
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const bus = busRef.current
@@ -811,7 +739,7 @@ export default function App() {
     return () => window.removeEventListener('pointermove', onMove)
   }, [])
 
-  /* 7. Ripples on click */
+  /* 7. Ripples */
   useEffect(() => {
     const container = ripplesRef.current
     if (!container) return
@@ -888,7 +816,7 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [bootPhase])
 
-  /* 10. Read stored name + return visit */
+  /* 10. Stored name + return visitor */
   useEffect(() => {
     try {
       const storedName = window.localStorage.getItem('pool-name')
@@ -899,7 +827,7 @@ export default function App() {
     } catch { /* ignore */ }
   }, [])
 
-  /* 11. Lock scroll during loader */
+  /* 11. Lock scroll */
   useEffect(() => {
     document.body.style.overflow = bootPhase === 'done' ? '' : 'hidden'
     return () => { document.body.style.overflow = '' }
@@ -938,7 +866,7 @@ export default function App() {
     return () => ctrl.abort()
   }, [])
 
-  /* 14. Sound events on depth change */
+  /* 14. Depth events */
   useEffect(() => {
     if (!soundOn) return
     const bus = busRef.current
@@ -959,7 +887,7 @@ export default function App() {
     }
   }, [visibleIndex, soundOn])
 
-  /* 15. Heartbeat — depth 03 → 05 */
+  /* 15. Heartbeat */
   useEffect(() => {
     const stopHeartbeat = () => {
       if (heartbeatTimerRef.current !== null) {
@@ -982,19 +910,16 @@ export default function App() {
       const bus = busRef.current
       if (!bus) return
       if (heartbeatTimerRef.current !== null) return
-
       const hbGain = bus.ctx.createGain()
       hbGain.gain.value = 0
       hbGain.connect(bus.master)
       heartbeatGainRef.current = hbGain
-
       const beat = () => {
         heartbeatThump(bus, hbGain, 0, 0.55)
         heartbeatThump(bus, hbGain, 0.16, 0.32)
       }
       beat()
       heartbeatTimerRef.current = window.setInterval(beat, 1500)
-
       const t = bus.ctx.currentTime
       hbGain.gain.cancelScheduledValues(t)
       hbGain.gain.setValueAtTime(0, t)
@@ -1103,26 +1028,16 @@ export default function App() {
     if (!busRef.current) {
       try {
         busRef.current = buildAudio()
-        // find the panner (it's the last node before destination inside buildAudio)
-        const bus = busRef.current
-        // grab panner reference by walking master's output — for simplicity, re-derive:
-        // (buildAudio attached master → underwater → panner → destination)
-        // we saved master only; walk downstream to find panner
-        const downstream = (bus.master as unknown as { _connections?: unknown })
-        void downstream
       } catch {
         return
       }
     }
     const bus = busRef.current
     if (!bus) return
-
     if (bus.ctx.state === 'suspended') void bus.ctx.resume()
-
     const now = bus.ctx.currentTime
     bus.master.gain.cancelScheduledValues(now)
     bus.master.gain.setValueAtTime(bus.master.gain.value, now)
-
     if (soundOn) {
       bus.master.gain.linearRampToValueAtTime(0, now + 1.6)
       setSoundOn(false)
@@ -1147,6 +1062,37 @@ export default function App() {
       if (bus && bus.ctx.state !== 'closed') void bus.ctx.close()
     }
   }, [])
+
+  /* 23. Mark submit */
+  const handleMarkSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault()
+      const name = markName.trim().slice(0, 24)
+      const line = markLine.trim().slice(0, 80)
+      const url = markUrl.trim().slice(0, 200)
+      if (!name || !line) return
+      const newMark: Mark = {
+        name,
+        line,
+        url,
+        date: new Date().toLocaleDateString('en-GB'),
+      }
+      try {
+        window.localStorage.setItem('pool-mark', JSON.stringify(newMark))
+      } catch { /* ignore */ }
+      setMark(newMark)
+    },
+    [markName, markLine, markUrl],
+  )
+
+  const editMark = useCallback(() => {
+    if (!mark) return
+    setMarkName(mark.name)
+    setMarkLine(mark.line)
+    setMarkUrl(mark.url)
+    try { window.localStorage.removeItem('pool-mark') } catch { /* ignore */ }
+    setMark(null)
+  }, [mark])
 
   /* ---- render ---- */
   const depthLabel =
@@ -1244,68 +1190,106 @@ export default function App() {
       )}
 
       <main>
+        {/* ---------- HERO ---------- */}
         <section className="surface">
           <h1>
             The pool is <em>still open.</em>
           </h1>
           <p className="timestamp">{clockDisplay} · The rooftop</p>
-          <p className="surface-note">Scroll to sink</p>
+          <p className="surface-note">Six artists · One pool · Scroll to sink</p>
           <div className="scroll-cue" aria-hidden="true">
             <span className="scroll-line" />
             <span>Descend</span>
           </div>
         </section>
 
-        {depths.map((depth, index) => (
-          <Fragment key={depth.caption}>
-            <section
-              className="depth-section"
-              data-index={index}
-              aria-label={depth.caption}
-            >
-              <div
-                className="depth-image"
-                style={{ backgroundImage: `url("${depth.image}")` }}
-                aria-hidden="true"
-              />
-              <div className="depth-veil" aria-hidden="true" />
-              <span className="pool-sign" aria-hidden="true">
-                {SIGNS[index]}
-              </span>
-              {KEY_SPOTS[index] && <Key style={KEY_SPOTS[index]} />}
-              <div className="depth-text">
-                <h2>{depth.line}</h2>
-                <p>{depth.caption}</p>
-              </div>
-              {index === 5 && showDepthBreak && (
-                <div className="depth-break" aria-hidden="true">
-                  this website is watching you back
+        {/* ---------- DEPTHS ---------- */}
+        {SLOTS.map((slot, index) => {
+          const a = slot.artist
+          return (
+            <Fragment key={a.name + index}>
+              <section
+                className="depth-section"
+                data-index={index}
+                aria-label={`${slot.poolCaption} — ${a.name}`}
+              >
+                <div
+                  className="depth-image"
+                  style={{ backgroundImage: `url("${a.image}")` }}
+                  aria-hidden="true"
+                />
+                <div className="depth-veil" aria-hidden="true" />
+
+                <span className="pool-sign" aria-hidden="true">
+                  {SIGNS[index]}
+                </span>
+
+                {KEY_SPOTS[index] && <Key style={KEY_SPOTS[index]} />}
+
+                <div className="depth-text">
+                  <h2>{slot.poolLine}</h2>
+                  <p className="depth-caption">{slot.poolCaption}</p>
+
+                  <div className="artist-block">
+                    <p className="artist-note">"{a.note}"</p>
+                    <a
+                      className="artist-credit"
+                      href={a.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <span className="artist-name">{a.name}</span>
+                      <span className="artist-dot">·</span>
+                      <span className="artist-handle">{a.handle}</span>
+                      <span className="artist-dot">·</span>
+                      <span className="artist-city">{a.city}</span>
+                      <span className="artist-arrow">↗</span>
+                    </a>
+                    <span className="artist-meta">
+                      {a.medium} · since {a.since}
+                    </span>
+                  </div>
+                </div>
+
+                {index === 5 && showDepthBreak && (
+                  <div className="depth-break" aria-hidden="true">
+                    this website is watching you back
+                  </div>
+                )}
+              </section>
+
+              {index < SLOTS.length - 1 && (
+                <div className="whisper" aria-hidden="true">
+                  <span>{WHISPERS[index]}</span>
                 </div>
               )}
-            </section>
-            {index < depths.length - 1 && (
-              <div className="whisper" aria-hidden="true">
-                <span>{WHISPERS[index]}</span>
-              </div>
-            )}
-          </Fragment>
-        ))}
+            </Fragment>
+          )
+        })}
 
+        {/* ---------- ARTIST ROSTER ---------- */}
         <section className="depth-section guest-log" data-index={-1}>
           <div className="depth-text guest-log-text">
-            <h2>Guest log.</h2>
+            <h2>The guest log.</h2>
+            <p className="guest-log-sub">
+              everyone who has ever swum in this pool
+            </p>
             <ul>
-              {GUEST_LOG.map((g, i) => (
-                <li key={g.name + g.date} style={{ transitionDelay: `${1 + i * 0.5}s` }}>
+              {ROSTER.map((g, i) => (
+                <li key={g.name + g.date} style={{ transitionDelay: `${1 + i * 0.35}s` }}>
                   <span className="log-name">{g.name}</span>
+                  <span className="log-dot">·</span>
+                  <span className="log-handle">{g.handle}</span>
                   <span className="log-dot">·</span>
                   <span className="log-date">{g.date}</span>
                   <span className="log-dot">·</span>
                   <span className="log-note">{g.note}</span>
                 </li>
               ))}
-              <li style={{ transitionDelay: `${1 + GUEST_LOG.length * 0.5}s` }}>
+              <li style={{ transitionDelay: `${1 + ROSTER.length * 0.35}s` }}>
                 <span className="log-name is-you">{finalGuestName}</span>
+                <span className="log-dot">·</span>
+                <span className="log-handle">you</span>
                 <span className="log-dot">·</span>
                 <span className="log-date">today</span>
                 <span className="log-dot">·</span>
@@ -1315,6 +1299,86 @@ export default function App() {
           </div>
         </section>
 
+        {/* ---------- LEAVE YOUR MARK ---------- */}
+        <section className="depth-section mark-section" data-index={-1}>
+          <div className="depth-text mark-text">
+            <h2>Leave your mark.</h2>
+            {!mark ? (
+              <>
+                <p className="mark-sub">
+                  one line. your name. kept here for as long as you keep it.
+                </p>
+                <form className="mark-form" onSubmit={handleMarkSubmit}>
+                  <input
+                    type="text"
+                    value={markName}
+                    onChange={(e) => setMarkName(e.target.value)}
+                    placeholder="your name"
+                    maxLength={24}
+                    required
+                  />
+                  <input
+                    type="text"
+                    value={markLine}
+                    onChange={(e) => setMarkLine(e.target.value)}
+                    placeholder="one line you want to leave"
+                    maxLength={80}
+                    required
+                  />
+                  <input
+                    type="url"
+                    value={markUrl}
+                    onChange={(e) => setMarkUrl(e.target.value)}
+                    placeholder="link (optional)"
+                    maxLength={200}
+                  />
+                  <button type="submit">keep it in the pool</button>
+                </form>
+              </>
+            ) : (
+              <div className="mark-card">
+                <p className="mark-card-line">"{mark.line}"</p>
+                <p className="mark-card-name">— {mark.name}</p>
+                {mark.url && (
+                  <a
+                    className="mark-card-url"
+                    href={mark.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {mark.url.replace(/^https?:\/\//, '').slice(0, 40)} ↗
+                  </a>
+                )}
+                <p className="mark-card-date">kept since {mark.date}</p>
+                <button type="button" className="mark-edit" onClick={editMark}>
+                  edit or remove your mark
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ---------- THE DEEP END ---------- */}
+        <section className="depth-section deep-end" data-index={-1}>
+          <div className="depth-text deep-end-text">
+            <h2>Where the pool meets.</h2>
+            <p className="deep-end-sub">
+              artists in this pool talk to each other here.
+              <br />
+              anyone can listen. anyone can join.
+            </p>
+            <a
+              className="deep-end-link"
+              href={POOL.deepEndUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              enter the deep end ↗
+            </a>
+          </div>
+        </section>
+
+        {/* ---------- DEPTH 07 ---------- */}
         {isReturnVisitor && (
           <section className="depth-section depth-seven" data-index={-1}>
             <div className="depth-text">
@@ -1327,18 +1391,31 @@ export default function App() {
           </section>
         )}
 
+        {/* ---------- FOOTER ---------- */}
         <footer className="pool-footer">
           <p>
-            The Pool at Night ·{' '}
+            The Pool at Night · Artist Meet ·{' '}
             <span className="depth-counter">{depthLabel}</span> /{' '}
             {String(TOTAL_DEPTHS).padStart(2, '0')}
           </p>
           {visitCount !== null && (
-            <p className="visitor-counter">you are the {ordinal(visitCount)} tonight</p>
+            <p className="visitor-counter">
+              you are the {ordinal(visitCount)} swimmer tonight
+            </p>
           )}
-          <button type="button" className="surface-link" onClick={returnToSurface}>
-            ↑ Surface
-          </button>
+          <div className="footer-actions">
+            <button type="button" className="surface-link" onClick={returnToSurface}>
+              ↑ Surface
+            </button>
+            <a
+              className="surface-link submit-link"
+              href={POOL.submitUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              submit your work ↗
+            </a>
+          </div>
           <p className="pool-footnote">v1.0 · last updated 03:47 AM</p>
         </footer>
       </main>
