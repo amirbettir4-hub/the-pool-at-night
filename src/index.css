@@ -143,7 +143,7 @@ body {
 .pool-grain {
   position: fixed;
   inset: -20%;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
   opacity: 0.13;
   background-repeat: repeat;
@@ -179,7 +179,7 @@ body {
 
 .surface {
   position: relative;
-  z-index: 3;
+  z-index: 5;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -216,6 +216,7 @@ body {
   text-transform: uppercase;
   color: var(--pool-muted);
   animation: fade-up 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+  font-variant-numeric: tabular-nums;
 }
 
 .surface-note {
@@ -314,7 +315,7 @@ body {
 
 .depth-section {
   position: relative;
-  z-index: 3;
+  z-index: 5;
   min-height: 100svh;
   display: flex;
   align-items: center;
@@ -477,7 +478,7 @@ body {
 
 .pool-footer {
   position: relative;
-  z-index: 3;
+  z-index: 5;
   min-height: 46vh;
   display: flex;
   flex-direction: column;
@@ -500,6 +501,209 @@ body {
 .pool-footer .depth-counter {
   color: var(--pool-accent);
   letter-spacing: 0.5em;
+}
+
+/* ============================================================
+   UPGRADES — cursor light, ripples, signs, guest log, 7th depth
+   ============================================================ */
+
+/* --- cursor light ------------------------------------------ */
+
+.cursor-light {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 640px;
+  height: 640px;
+  margin-left: -320px;
+  margin-top: -320px;
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    circle at center,
+    rgba(240, 184, 120, 0.14) 0%,
+    rgba(240, 184, 120, 0.05) 28%,
+    transparent 65%
+  );
+  transform: translate3d(var(--mx, 50vw), var(--my, 50vh), 0);
+  will-change: transform;
+  opacity: 0.9;
+}
+
+/* --- ripples ----------------------------------------------- */
+
+.pool-ripples {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.pool-ripple {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
+  border-radius: 50%;
+  border: 1px solid rgba(127, 176, 208, 0.65);
+  box-shadow:
+    0 0 24px rgba(127, 176, 208, 0.35) inset,
+    0 0 18px rgba(127, 176, 208, 0.20);
+  animation: ripple-expand 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+@keyframes ripple-expand {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(16);
+    opacity: 0;
+  }
+}
+
+/* --- pool signs -------------------------------------------- */
+
+.pool-sign {
+  position: absolute;
+  z-index: 2;
+  top: 14%;
+  left: 5vw;
+  font-size: 0.55rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(232, 224, 208, 0.35);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  padding: 0.8rem 0.6rem;
+  border-left: 1px solid rgba(232, 224, 208, 0.18);
+  opacity: 0;
+  transition: opacity 2.4s ease 1.2s;
+}
+
+.depth-section.is-visible .pool-sign {
+  opacity: 1;
+}
+
+/* --- guest log --------------------------------------------- */
+
+.guest-log {
+  min-height: 92svh;
+}
+
+.guest-log-text {
+  text-align: left;
+  max-width: 700px;
+  width: 100%;
+}
+
+.guest-log-text h2 {
+  text-align: center;
+  margin-bottom: 3.2rem;
+}
+
+.guest-log ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.guest-log ul li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  font-size: clamp(0.58rem, 1.55vw, 0.75rem);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pool-muted);
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 1.8s ease,
+    transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.depth-section.is-visible .guest-log ul li {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.guest-log .log-name {
+  color: var(--pool-cream);
+  flex: 0 0 auto;
+}
+
+.guest-log .log-date {
+  color: rgba(232, 224, 208, 0.48);
+  flex: 0 0 auto;
+}
+
+.guest-log .log-dot {
+  color: rgba(232, 224, 208, 0.28);
+  flex: 0 0 auto;
+}
+
+.guest-log .log-note {
+  color: var(--pool-accent);
+  margin-left: auto;
+  text-align: right;
+}
+
+/* --- 7th depth --------------------------------------------- */
+
+.depth-seven {
+  min-height: 100svh;
+  background: #000;
+}
+
+.depth-seven .depth-veil,
+.depth-seven .depth-image {
+  display: none;
+}
+
+.depth-seven .depth-text h2 {
+  font-size: clamp(1.6rem, 4.2vw, 3rem);
+  opacity: 0.72;
+  letter-spacing: 0.02em;
+}
+
+/* --- return to surface link -------------------------------- */
+
+.surface-link {
+  margin-top: 1.6rem;
+  padding: 0.72rem 1.3rem;
+  background: transparent;
+  border: 1px solid rgba(232, 224, 208, 0.22);
+  border-radius: 999px;
+  color: var(--pool-muted);
+  font-family: inherit;
+  font-weight: 300;
+  font-size: 0.55rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 0.7s ease,
+    border-color 0.7s ease,
+    background 0.7s ease;
+}
+
+.surface-link:hover {
+  color: var(--pool-accent);
+  border-color: rgba(240, 184, 120, 0.55);
+  background: rgba(240, 184, 120, 0.05);
 }
 
 /* ============================================================
@@ -583,6 +787,36 @@ body {
   .pool-footer p {
     letter-spacing: 0.3em;
   }
+
+  .pool-sign {
+    top: 10%;
+    left: 3vw;
+    font-size: 0.5rem;
+    letter-spacing: 0.34em;
+    padding: 0.6rem 0.4rem;
+  }
+
+  .guest-log ul li {
+    letter-spacing: 0.16em;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .guest-log .log-note {
+    margin-left: 0;
+    text-align: left;
+    flex-basis: 100%;
+  }
+
+  .cursor-light {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .cursor-light {
+    display: none;
+  }
 }
 
 /* ============================================================
@@ -604,12 +838,21 @@ body {
 
   .depth-section,
   .depth-text,
-  .depth-image {
+  .depth-image,
+  .guest-log ul li {
     transition-duration: 0.6s !important;
   }
 
   .depth-section.is-visible .depth-image {
     animation: none !important;
     transform: scale(1);
+  }
+
+  .pool-ripple {
+    animation-duration: 0.8s !important;
+  }
+
+  .cursor-light {
+    display: none;
   }
 }
