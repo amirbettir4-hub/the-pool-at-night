@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   THE POOL AT NIGHT — design tokens
+   TOKENS
    ============================================================ */
 
 :root {
@@ -14,9 +14,7 @@
   --pool-shift: 0%;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html {
   scroll-behavior: smooth;
@@ -44,12 +42,8 @@ body {
   color: var(--pool-cream);
 }
 
-.pool-app {
-  position: relative;
-  min-height: 100%;
-}
+.pool-app { position: relative; min-height: 100%; }
 
-/* hidden SVG defs */
 .pool-filter-defs {
   position: absolute;
   width: 0;
@@ -58,7 +52,7 @@ body {
 }
 
 /* ============================================================
-   LAYER 0 — shifting gradient
+   BACKGROUND LAYERS
    ============================================================ */
 
 .pool-bg {
@@ -81,10 +75,6 @@ body {
   transition: background-position 0.7s linear;
   will-change: background-position;
 }
-
-/* ============================================================
-   LAYER 1 — caustics
-   ============================================================ */
 
 .pool-caustics {
   position: fixed;
@@ -120,31 +110,12 @@ body {
 }
 
 @keyframes caustics {
-  0% {
-    transform: translate3d(-2%, -1%, 0) scale(1.06) rotate(0deg);
-    opacity: 0.22;
-  }
-  25% {
-    transform: translate3d(2%, 1.5%, 0) scale(1.12) rotate(2deg);
-    opacity: 0.34;
-  }
-  50% {
-    transform: translate3d(1%, -2%, 0) scale(1.08) rotate(-1.5deg);
-    opacity: 0.26;
-  }
-  75% {
-    transform: translate3d(-2.5%, 1%, 0) scale(1.14) rotate(1deg);
-    opacity: 0.36;
-  }
-  100% {
-    transform: translate3d(-2%, -1%, 0) scale(1.06) rotate(0deg);
-    opacity: 0.22;
-  }
+  0% { transform: translate3d(-2%, -1%, 0) scale(1.06) rotate(0deg); opacity: 0.22; }
+  25% { transform: translate3d(2%, 1.5%, 0) scale(1.12) rotate(2deg); opacity: 0.34; }
+  50% { transform: translate3d(1%, -2%, 0) scale(1.08) rotate(-1.5deg); opacity: 0.26; }
+  75% { transform: translate3d(-2.5%, 1%, 0) scale(1.14) rotate(1deg); opacity: 0.36; }
+  100% { transform: translate3d(-2%, -1%, 0) scale(1.06) rotate(0deg); opacity: 0.22; }
 }
-
-/* ============================================================
-   LAYER 2 — cursor light
-   ============================================================ */
 
 .cursor-light {
   position: fixed;
@@ -168,10 +139,6 @@ body {
   opacity: 0.9;
 }
 
-/* ============================================================
-   LAYER 3 — particles
-   ============================================================ */
-
 .pool-particles {
   position: fixed;
   inset: 0;
@@ -180,10 +147,6 @@ body {
   width: 100%;
   height: 100%;
 }
-
-/* ============================================================
-   LAYER 4 — grain
-   ============================================================ */
 
 .pool-grain {
   position: fixed;
@@ -205,10 +168,6 @@ body {
   80% { transform: translate3d(3%, 1%, 0); }
   100% { transform: translate3d(0, 0, 0); }
 }
-
-/* ============================================================
-   LAYER 5 — ripples
-   ============================================================ */
 
 .pool-ripples {
   position: fixed;
@@ -352,7 +311,7 @@ body {
 }
 
 /* ============================================================
-   HERO / SURFACE
+   HERO
    ============================================================ */
 
 .surface {
@@ -428,11 +387,7 @@ body {
   width: 1px;
   height: 64px;
   overflow: hidden;
-  background: linear-gradient(
-    to bottom,
-    rgba(232, 224, 208, 0),
-    rgba(232, 224, 208, 0.45)
-  );
+  background: linear-gradient(to bottom, rgba(232, 224, 208, 0), rgba(232, 224, 208, 0.45));
 }
 
 .scroll-line::after {
@@ -442,11 +397,7 @@ body {
   top: -64px;
   width: 1px;
   height: 64px;
-  background: linear-gradient(
-    to bottom,
-    rgba(127, 176, 208, 0),
-    var(--pool-underwater)
-  );
+  background: linear-gradient(to bottom, rgba(127, 176, 208, 0), var(--pool-underwater));
   animation: scroll-line 3.8s ease-in-out infinite;
 }
 
@@ -480,19 +431,14 @@ body {
   padding: 18vh 8vw;
   overflow: hidden;
   opacity: 0;
-  transition:
-    opacity 1.8s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 1.8s cubic-bezier(0.16, 1, 0.3, 1), transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
   transform: translateY(64px);
   will-change: opacity, transform;
   --parallax-slow: 0px;
   --parallax-fast: 0px;
 }
 
-.depth-section.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
+.depth-section.is-visible { opacity: 1; transform: translateY(0); }
 
 .depth-image {
   position: absolute;
@@ -520,28 +466,12 @@ body {
   to { scale: 1; }
 }
 
-/* --- per-depth color grading (descent gets warmer/darker/older) --- */
-
-.depth-section[data-index="0"] .depth-image {
-  filter: saturate(0.78) contrast(1.06) brightness(0.78) blur(1px) hue-rotate(-6deg);
-}
-.depth-section[data-index="1"] .depth-image {
-  filter: saturate(0.72) contrast(1.08) brightness(0.72) blur(1px) hue-rotate(-4deg);
-}
-.depth-section[data-index="2"] .depth-image {
-  filter: saturate(0.68) contrast(1.10) brightness(0.66) blur(1.2px) hue-rotate(-1deg);
-}
-.depth-section[data-index="3"] .depth-image {
-  filter: saturate(0.60) contrast(1.12) brightness(0.58) blur(1.4px) hue-rotate(4deg);
-}
-.depth-section[data-index="4"] .depth-image {
-  filter: saturate(0.46) contrast(1.16) brightness(0.50) blur(1.6px) hue-rotate(10deg);
-}
-.depth-section[data-index="5"] .depth-image {
-  filter: saturate(0.16) contrast(1.22) brightness(0.44) blur(1.9px) hue-rotate(18deg);
-}
-
-/* --- image blink (the uncanny flicker) --- */
+.depth-section[data-index="0"] .depth-image { filter: saturate(0.78) contrast(1.06) brightness(0.78) blur(1px) hue-rotate(-6deg); }
+.depth-section[data-index="1"] .depth-image { filter: saturate(0.72) contrast(1.08) brightness(0.72) blur(1px) hue-rotate(-4deg); }
+.depth-section[data-index="2"] .depth-image { filter: saturate(0.68) contrast(1.10) brightness(0.66) blur(1.2px) hue-rotate(-1deg); }
+.depth-section[data-index="3"] .depth-image { filter: saturate(0.60) contrast(1.12) brightness(0.58) blur(1.4px) hue-rotate(4deg); }
+.depth-section[data-index="4"] .depth-image { filter: saturate(0.46) contrast(1.16) brightness(0.50) blur(1.6px) hue-rotate(10deg); }
+.depth-section[data-index="5"] .depth-image { filter: saturate(0.16) contrast(1.22) brightness(0.44) blur(1.9px) hue-rotate(18deg); }
 
 .depth-section.is-blinking .depth-image {
   opacity: 0.04 !important;
@@ -552,13 +482,12 @@ body {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background:
-    radial-gradient(
-      ellipse at 50% 58%,
-      rgba(2, 5, 10, 0.10) 0%,
-      rgba(2, 5, 10, 0.72) 68%,
-      rgba(2, 5, 10, 0.96) 100%
-    );
+  background: radial-gradient(
+    ellipse at 50% 58%,
+    rgba(2, 5, 10, 0.10) 0%,
+    rgba(2, 5, 10, 0.72) 68%,
+    rgba(2, 5, 10, 0.96) 100%
+  );
 }
 
 .depth-text {
@@ -568,9 +497,7 @@ body {
   text-align: center;
   opacity: 0;
   transform: translate3d(0, calc(var(--parallax-fast, 0px) + 26px), 0);
-  transition:
-    opacity 2s ease 0.45s,
-    transform 2s cubic-bezier(0.16, 1, 0.3, 1) 0.45s;
+  transition: opacity 2s ease 0.45s, transform 2s cubic-bezier(0.16, 1, 0.3, 1) 0.45s;
   will-change: opacity, transform;
 }
 
@@ -580,7 +507,7 @@ body {
 }
 
 .depth-text h2 {
-  margin: 0 0 1.6rem;
+  margin: 0 0 1.4rem;
   font-family: "Cormorant Garamond", "Times New Roman", serif;
   font-weight: 300;
   font-style: italic;
@@ -592,15 +519,84 @@ body {
   text-shadow: 0 0 80px rgba(127, 176, 208, 0.35);
 }
 
-.depth-text p {
-  margin: 0;
-  font-size: clamp(0.55rem, 1.5vw, 0.72rem);
-  letter-spacing: 0.36em;
+.depth-caption {
+  margin: 0 0 2.4rem !important;
+  font-size: clamp(0.55rem, 1.5vw, 0.72rem) !important;
+  letter-spacing: 0.36em !important;
   text-transform: uppercase;
   color: var(--pool-muted);
 }
 
-/* --- wet text at depth 05 & 06 --- */
+/* ---- ARTIST BLOCK inside each depth ---- */
+
+.artist-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--pool-hairline);
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.artist-note {
+  margin: 0 0 1rem !important;
+  font-family: "Cormorant Garamond", "Times New Roman", serif;
+  font-weight: 300;
+  font-style: italic;
+  font-size: clamp(0.9rem, 1.9vw, 1.15rem);
+  line-height: 1.5;
+  letter-spacing: 0.015em;
+  text-transform: none;
+  color: rgba(232, 224, 208, 0.72);
+  text-shadow: 0 0 30px rgba(127, 176, 208, 0.2);
+}
+
+.artist-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid rgba(232, 224, 208, 0.22);
+  border-radius: 999px;
+  color: var(--pool-cream);
+  font-family: "DM Mono", monospace;
+  font-size: clamp(0.55rem, 1.3vw, 0.66rem);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.6s ease, border-color 0.6s ease, background 0.6s ease;
+}
+
+.artist-credit:hover {
+  color: var(--pool-accent);
+  border-color: rgba(240, 184, 120, 0.55);
+  background: rgba(240, 184, 120, 0.05);
+}
+
+.artist-credit .artist-name { color: var(--pool-cream); }
+.artist-credit .artist-dot { color: rgba(232, 224, 208, 0.28); }
+.artist-credit .artist-handle { color: var(--pool-underwater); }
+.artist-credit .artist-city { color: rgba(232, 224, 208, 0.55); }
+.artist-credit .artist-arrow {
+  color: var(--pool-accent);
+  margin-left: 0.35rem;
+  transition: transform 0.4s ease;
+}
+.artist-credit:hover .artist-arrow { transform: translate(2px, -2px); }
+
+.artist-meta {
+  font-size: clamp(0.5rem, 1.15vw, 0.6rem);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: rgba(232, 224, 208, 0.38);
+  margin-top: 0.35rem;
+}
+
+/* ---- wet text at depths 05 & 06 ---- */
 
 .depth-section[data-index="4"] .depth-text h2,
 .depth-section[data-index="5"] .depth-text h2 {
@@ -608,9 +604,7 @@ body {
   overflow: visible;
 }
 
-/* ============================================================
-   DEPTH 06 BREAK
-   ============================================================ */
+/* ---- depth 06 break ---- */
 
 .depth-break {
   position: absolute;
@@ -618,7 +612,7 @@ body {
   bottom: 12vh;
   left: 50%;
   transform: translateX(-50%);
-  font-family: "DM Mono", ui-monospace, monospace;
+  font-family: "DM Mono", monospace;
   font-size: clamp(0.55rem, 1.3vw, 0.68rem);
   letter-spacing: 0.42em;
   text-transform: uppercase;
@@ -636,9 +630,7 @@ body {
   100% { opacity: 0; filter: blur(3px); }
 }
 
-/* ============================================================
-   POOL SIGNS
-   ============================================================ */
+/* ---- pool signs ---- */
 
 .pool-sign {
   position: absolute;
@@ -657,13 +649,9 @@ body {
   transition: opacity 2.4s ease 1.2s;
 }
 
-.depth-section.is-visible .pool-sign {
-  opacity: 1;
-}
+.depth-section.is-visible .pool-sign { opacity: 1; }
 
-/* ============================================================
-   THE KEY
-   ============================================================ */
+/* ---- the key ---- */
 
 .pool-key {
   position: absolute;
@@ -676,13 +664,9 @@ body {
   pointer-events: none;
 }
 
-.depth-section.is-visible .pool-key {
-  opacity: var(--key-opacity, 0.7);
-}
+.depth-section.is-visible .pool-key { opacity: var(--key-opacity, 0.7); }
 
-/* ============================================================
-   WHISPERS
-   ============================================================ */
+/* ---- whispers ---- */
 
 .whisper {
   position: relative;
@@ -695,24 +679,17 @@ body {
   opacity: 0;
   transform: translateY(22px);
   filter: blur(6px);
-  transition:
-    opacity 2.4s ease,
-    transform 2.4s cubic-bezier(0.16, 1, 0.3, 1),
-    filter 2.4s ease;
+  transition: opacity 2.4s ease, transform 2.4s cubic-bezier(0.16, 1, 0.3, 1), filter 2.4s ease;
   will-change: opacity, transform, filter;
 }
 
-.whisper.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
+.whisper.is-visible { opacity: 1; transform: translateY(0); filter: blur(0); }
 
 .whisper span {
   display: block;
   max-width: 720px;
   text-align: center;
-  font-family: "Cormorant Garamond", "Times New Roman", serif;
+  font-family: "Cormorant Garamond", serif;
   font-weight: 300;
   font-style: italic;
   font-size: clamp(1.05rem, 2.6vw, 1.7rem);
@@ -751,11 +728,7 @@ body {
   transition: color 0.7s ease, border-color 0.7s ease, background 0.7s ease;
 }
 
-.sound-toggle:hover {
-  color: var(--pool-cream);
-  border-color: rgba(240, 184, 120, 0.55);
-}
-
+.sound-toggle:hover { color: var(--pool-cream); border-color: rgba(240, 184, 120, 0.55); }
 .sound-toggle.is-on {
   color: var(--pool-accent);
   border-color: rgba(240, 184, 120, 0.55);
@@ -772,10 +745,7 @@ body {
   transition: opacity 0.7s ease;
 }
 
-.sound-toggle.is-on .dot {
-  opacity: 1;
-  animation: pulse-soft 2.8s ease-in-out infinite;
-}
+.sound-toggle.is-on .dot { opacity: 1; animation: pulse-soft 2.8s ease-in-out infinite; }
 
 /* ============================================================
    STAY TOAST
@@ -810,22 +780,29 @@ body {
 }
 
 /* ============================================================
-   GUEST LOG
+   GUEST LOG / ARTIST ROSTER
    ============================================================ */
 
-.guest-log {
-  min-height: 92svh;
-}
+.guest-log { min-height: 92svh; }
 
 .guest-log-text {
   text-align: left;
-  max-width: 700px;
+  max-width: 720px;
   width: 100%;
 }
 
 .guest-log-text h2 {
   text-align: center;
-  margin-bottom: 3.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.guest-log-sub {
+  text-align: center;
+  margin: 0 0 3rem !important;
+  font-size: clamp(0.5rem, 1.2vw, 0.6rem) !important;
+  letter-spacing: 0.4em !important;
+  text-transform: uppercase;
+  color: rgba(232, 224, 208, 0.35);
 }
 
 .guest-log ul {
@@ -834,52 +811,265 @@ body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.4rem;
+  gap: 1.2rem;
 }
 
 .guest-log ul li {
   display: flex;
   align-items: baseline;
-  gap: 0.9rem;
-  font-size: clamp(0.58rem, 1.55vw, 0.75rem);
-  letter-spacing: 0.22em;
+  gap: 0.7rem;
+  font-size: clamp(0.55rem, 1.45vw, 0.72rem);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--pool-muted);
   opacity: 0;
   transform: translateY(14px);
   transition: opacity 1.8s ease, transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-wrap: wrap;
 }
 
-.depth-section.is-visible .guest-log ul li {
-  opacity: 1;
-  transform: translateY(0);
-}
+.depth-section.is-visible .guest-log ul li { opacity: 1; transform: translateY(0); }
 
 .guest-log .log-name { color: var(--pool-cream); flex: 0 0 auto; }
 .guest-log .log-name.is-you {
   color: var(--pool-accent);
   text-shadow: 0 0 22px rgba(240, 184, 120, 0.35);
 }
+.guest-log .log-handle { color: var(--pool-underwater); flex: 0 0 auto; }
 .guest-log .log-date { color: rgba(232, 224, 208, 0.48); flex: 0 0 auto; }
 .guest-log .log-dot { color: rgba(232, 224, 208, 0.28); flex: 0 0 auto; }
-.guest-log .log-note {
+.guest-log .log-note { color: var(--pool-accent); margin-left: auto; text-align: right; }
+
+/* ============================================================
+   LEAVE YOUR MARK
+   ============================================================ */
+
+.mark-section { min-height: 100svh; }
+
+.mark-text {
+  text-align: center;
+  max-width: 640px;
+  width: 100%;
+}
+
+.mark-text h2 { margin-bottom: 1.4rem; }
+
+.mark-sub {
+  margin: 0 0 2.6rem !important;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(0.95rem, 1.9vw, 1.15rem);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(232, 224, 208, 0.55);
+  line-height: 1.5;
+}
+
+.mark-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.mark-form input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(232, 224, 208, 0.22);
+  color: var(--pool-cream);
+  font-family: "DM Mono", monospace;
+  font-weight: 300;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-align: center;
+  padding: 0.65rem 0.4rem;
+  outline: none;
+  transition: border-color 0.6s ease;
+  text-transform: uppercase;
+}
+
+.mark-form input:nth-child(2) {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--pool-cream);
+}
+
+.mark-form input:focus { border-bottom-color: var(--pool-accent); }
+.mark-form input::placeholder {
+  color: rgba(232, 224, 208, 0.22);
+  text-transform: uppercase;
+  font-style: normal;
+  font-family: "DM Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+}
+
+.mark-form input:nth-child(2)::placeholder {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  text-transform: none;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.mark-form button {
+  margin-top: 1.4rem;
+  padding: 0.85rem 1.4rem;
+  border: 1px solid rgba(240, 184, 120, 0.4);
+  border-radius: 999px;
+  background: transparent;
   color: var(--pool-accent);
-  margin-left: auto;
-  text-align: right;
+  font-family: inherit;
+  font-size: 0.55rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.6s ease, border-color 0.6s ease;
+  align-self: center;
+}
+
+.mark-form button:hover {
+  background: rgba(240, 184, 120, 0.08);
+  border-color: rgba(240, 184, 120, 0.7);
+}
+
+.mark-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 2.4rem 1.6rem;
+  border: 1px solid rgba(240, 184, 120, 0.28);
+  border-radius: 4px;
+  background: rgba(240, 184, 120, 0.03);
+  animation: fade-up 2.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mark-card-line {
+  margin: 0 !important;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+  letter-spacing: 0.015em;
+  text-transform: none;
+  color: var(--pool-cream);
+  line-height: 1.5;
+  text-shadow: 0 0 30px rgba(127, 176, 208, 0.2);
+}
+
+.mark-card-name {
+  margin: 0 !important;
+  font-size: 0.6rem;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--pool-accent);
+}
+
+.mark-card-url {
+  margin-top: 0.4rem;
+  color: var(--pool-underwater);
+  font-size: 0.55rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.5s ease;
+}
+
+.mark-card-url:hover { color: var(--pool-accent); }
+
+.mark-card-date {
+  margin-top: 0.6rem !important;
+  font-size: 0.5rem !important;
+  letter-spacing: 0.34em !important;
+  color: rgba(232, 224, 208, 0.38) !important;
+  text-transform: uppercase;
+}
+
+.mark-edit {
+  margin-top: 1rem;
+  padding: 0.5rem 0.9rem;
+  background: transparent;
+  border: 1px solid rgba(232, 224, 208, 0.18);
+  border-radius: 999px;
+  color: rgba(232, 224, 208, 0.45);
+  font-family: inherit;
+  font-size: 0.5rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.5s ease, border-color 0.5s ease;
+}
+
+.mark-edit:hover {
+  color: var(--pool-accent);
+  border-color: rgba(240, 184, 120, 0.5);
+}
+
+/* ============================================================
+   THE DEEP END
+   ============================================================ */
+
+.deep-end {
+  min-height: 90svh;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(26, 58, 82, 0.55) 0%,
+    rgba(2, 5, 10, 0.9) 70%
+  );
+}
+
+.deep-end-text {
+  text-align: center;
+  max-width: 720px;
+}
+
+.deep-end-text h2 { margin-bottom: 1.6rem; }
+
+.deep-end-sub {
+  margin: 0 0 2.8rem !important;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(232, 224, 208, 0.55);
+  line-height: 1.6;
+}
+
+.deep-end-link {
+  display: inline-block;
+  padding: 1rem 1.8rem;
+  border: 1px solid rgba(240, 184, 120, 0.5);
+  border-radius: 999px;
+  color: var(--pool-accent);
+  font-family: "DM Mono", monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background 0.7s ease, border-color 0.7s ease, color 0.7s ease;
+}
+
+.deep-end-link:hover {
+  background: rgba(240, 184, 120, 0.08);
+  border-color: rgba(240, 184, 120, 0.8);
+  color: var(--pool-cream);
 }
 
 /* ============================================================
    DEPTH 07
    ============================================================ */
 
-.depth-seven {
-  min-height: 100svh;
-  background: #000;
-}
-
+.depth-seven { min-height: 100svh; background: #000; }
 .depth-seven .depth-veil,
 .depth-seven .depth-image { display: none; }
-
 .depth-seven .depth-text h2 {
   font-size: clamp(1.6rem, 4.2vw, 3rem);
   opacity: 0.72;
@@ -907,15 +1097,12 @@ body {
 .pool-footer p {
   margin: 0;
   font-size: clamp(0.55rem, 1.4vw, 0.68rem);
-  letter-spacing: 0.44em;
+  letter-spacing: 0.4em;
   text-transform: uppercase;
   color: var(--pool-muted);
 }
 
-.pool-footer .depth-counter {
-  color: var(--pool-accent);
-  letter-spacing: 0.5em;
-}
+.pool-footer .depth-counter { color: var(--pool-accent); letter-spacing: 0.5em; }
 
 .visitor-counter {
   color: rgba(127, 176, 208, 0.85) !important;
@@ -924,8 +1111,15 @@ body {
   text-shadow: 0 0 22px rgba(127, 176, 208, 0.3);
 }
 
+.footer-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 1.4rem;
+}
+
 .surface-link {
-  margin-top: 1.6rem;
   padding: 0.72rem 1.3rem;
   background: transparent;
   border: 1px solid rgba(232, 224, 208, 0.22);
@@ -934,8 +1128,9 @@ body {
   font-family: inherit;
   font-weight: 300;
   font-size: 0.55rem;
-  letter-spacing: 0.42em;
+  letter-spacing: 0.4em;
   text-transform: uppercase;
+  text-decoration: none;
   cursor: pointer;
   transition: color 0.7s ease, border-color 0.7s ease, background 0.7s ease;
 }
@@ -946,15 +1141,20 @@ body {
   background: rgba(240, 184, 120, 0.05);
 }
 
+.submit-link {
+  border-color: rgba(240, 184, 120, 0.4);
+  color: var(--pool-accent);
+}
+
 .pool-footnote {
-  margin-top: 2.4rem !important;
+  margin-top: 2rem !important;
   font-size: 0.5rem !important;
   letter-spacing: 0.34em !important;
   color: rgba(232, 224, 208, 0.28) !important;
 }
 
 /* ============================================================
-   RESPONSIVE — max-width: 700px
+   RESPONSIVE
    ============================================================ */
 
 @media (max-width: 700px) {
@@ -977,9 +1177,26 @@ body {
   .depth-section { padding: 16vh 7vw; }
   .depth-text h2 {
     font-size: clamp(1.9rem, 9.5vw, 3rem);
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
   }
-  .depth-text p { letter-spacing: 0.26em; }
+  .depth-caption { letter-spacing: 0.26em !important; }
+
+  .artist-block {
+    padding-top: 1.6rem;
+    margin-top: 1.6rem;
+    gap: 0.5rem;
+  }
+  .artist-note {
+    font-size: 0.85rem;
+    margin-bottom: 0.7rem !important;
+  }
+  .artist-credit {
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    padding: 0.5rem 0.75rem;
+    gap: 0.35rem;
+  }
+  .artist-meta { font-size: 0.48rem; letter-spacing: 0.28em; }
 
   .sound-toggle {
     top: 0.9rem;
@@ -990,11 +1207,8 @@ body {
     gap: 0.5rem;
   }
 
-  .pool-footer {
-    min-height: 40vh;
-    padding: 12vh 7vw 14vh;
-  }
-  .pool-footer p { letter-spacing: 0.3em; }
+  .pool-footer { min-height: 40vh; padding: 12vh 7vw 14vh; }
+  .pool-footer p { letter-spacing: 0.28em; }
 
   .pool-sign {
     top: 10%;
@@ -1004,16 +1218,9 @@ body {
     padding: 0.6rem 0.4rem;
   }
 
-  .guest-log ul li {
-    letter-spacing: 0.16em;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-  }
-  .guest-log .log-note {
-    margin-left: 0;
-    text-align: left;
-    flex-basis: 100%;
-  }
+  .guest-log ul li { letter-spacing: 0.14em; gap: 0.45rem; }
+  .guest-log .log-note { margin-left: 0; text-align: left; flex-basis: 100%; }
+  .guest-log .log-handle { font-size: 0.5rem; }
 
   .cursor-light { display: none; }
 
@@ -1022,11 +1229,9 @@ body {
   .name-prompt input { min-width: 220px; font-size: 1.3rem; }
 
   .whisper { min-height: 22vh; padding: 3vh 8vw; }
-  .whisper span { font-size: 1rem; letter-spacing: 0.01em; }
+  .whisper span { font-size: 1rem; }
 
-  .pool-key {
-    filter: blur(0.3px) drop-shadow(0 0 8px rgba(240, 184, 120, 0.1));
-  }
+  .pool-key { filter: blur(0.3px) drop-shadow(0 0 8px rgba(240, 184, 120, 0.1)); }
 
   .depth-break {
     bottom: 8vh;
@@ -1035,6 +1240,14 @@ body {
     max-width: 80vw;
     line-height: 1.6;
   }
+
+  .mark-form input { font-size: 0.62rem; letter-spacing: 0.14em; }
+  .mark-form input:nth-child(2) { font-size: 1rem; }
+  .mark-card { padding: 1.8rem 1.2rem; }
+  .mark-card-line { font-size: 1rem; }
+
+  .footer-actions { gap: 0.6rem; }
+  .surface-link { padding: 0.6rem 1rem; font-size: 0.5rem; letter-spacing: 0.3em; }
 }
 
 @media (hover: none) {
@@ -1063,10 +1276,7 @@ body {
     transition-duration: 0.6s !important;
   }
 
-  .depth-section.is-visible .depth-image {
-    animation: none !important;
-    scale: 1;
-  }
+  .depth-section.is-visible .depth-image { animation: none !important; scale: 1; }
 
   .pool-ripple { animation-duration: 0.8s !important; }
   .cursor-light { display: none; }
@@ -1078,9 +1288,7 @@ body {
   .depth-break { animation-duration: 1s !important; }
 
   .depth-section[data-index="4"] .depth-text h2,
-  .depth-section[data-index="5"] .depth-text h2 {
-    filter: none !important;
-  }
+  .depth-section[data-index="5"] .depth-text h2 { filter: none !important; }
 
   .depth-section.is-blinking .depth-image {
     opacity: 0.52 !important;
