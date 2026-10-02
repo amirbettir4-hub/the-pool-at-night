@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 /* ============================================================
    DATA
@@ -58,7 +65,6 @@ const SIGNS = [
   'NO LEAVING',
 ]
 
-/* Whispers — one faint line between each pair of depths */
 const WHISPERS = [
   'the tile was warm',
   'someone was counting',
@@ -67,7 +73,6 @@ const WHISPERS = [
   "don't turn around",
 ]
 
-/* Guest log — the wrong-date one is intentional */
 const GUEST_LOG = [
   { name: 'AMY L.', date: '07 / 14 / 1998', note: 'depth 4' },
   { name: 'M. KOWALSKI', date: '06 / 02 / 2001', note: 'never came back' },
@@ -75,7 +80,6 @@ const GUEST_LOG = [
   { name: 'J. & J.', date: '03 / 03 / 2019', note: 'still swimming' },
 ]
 
-/* Key sightings — which depths hide the key, and where */
 const KEY_SPOTS: Record<number, React.CSSProperties> = {
   1: {
     bottom: '14%',
@@ -101,7 +105,7 @@ const KEY_SPOTS: Record<number, React.CSSProperties> = {
 }
 
 const TOTAL_DEPTHS = depths.length
-const BOOT_TEXT = 'entering the pool...'
+const ABACUS_NAMESPACE = 'the-pool-at-night-liminal'
 
 /* ============================================================
    AUDIO HELPERS
@@ -186,7 +190,7 @@ const playMuffledLaugh = (ctx: AudioContext, dest: AudioNode) => {
 }
 
 /* ============================================================
-   CLOCK HELPERS
+   HELPERS
    ============================================================ */
 
 const formatClock = (d: Date) => {
@@ -206,8 +210,14 @@ const randomRooftopTime = () => {
   return d.getTime()
 }
 
+const ordinal = (n: number) => {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`
+}
+
 /* ============================================================
-   THE KEY — a small recurring SVG
+   THE KEY — recurring SVG
    ============================================================ */
 
 function Key({ style }: { style?: React.CSSProperties }) {
@@ -233,10 +243,109 @@ function Key({ style }: { style?: React.CSSProperties }) {
 }
 
 /* ============================================================
+   PARTICLES — canvas of slow motes
+   ============================================================ */
+
+function Particles() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    let raf = 0
+
+    type P = {
+      x: number
+      y: number
+      r: number
+      vy: number
+      vx: number
+      life: number
+      maxLife: number
+      hue: number
+    }
+    const particles: P[] = []
+
+    const resize = () => {
+      canvas.width = window.innerWidth * dpr
+      canvas.height = window.innerHeight * dpr
+      canvas.style.width = `${window.innerWidth}px`
+      canvas.style.height = `${window.innerHeight}px`
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
+    const spawn = (startAnywhere = false): P => ({
+      x: Math.random() * canvas.width,
+      y: startAnywhere ? Math.random() * canvas.height : canvas.height + 20,
+      r: 0.5 + Math.random() * 1.5,
+      vy: -(0.12 + Math.random() * 0.32) * dpr,
+      vx: (Math.random() - 0.5) * 0.16 * dpr,
+      life: startAnywhere ? Math.random() * 700 : 0,
+      maxLife: 700 + Math.random() * 900,
+      hue: Math.random() < 0.25 ? 34 : 200, // warm or underwater
+    })
+
+    for (let i = 0; i < 46; i++) particles.push(spawn(true))
+
+    const tick = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (particles.length < 70 && Math.random() < 0.02) particles.push(spawn())
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]
+        p.x += p.vx
+        p.y += p.vy
+        p.life++
+
+        if (p.life > p.maxLife || p.y < -30) {
+          particles.splice(i, 1)
+          continue
+        }
+
+        const t = p.life / p.maxLife
+        const alpha = Math.sin(t * Math.PI) * 0.45
+        const color =
+          p.hue === 34
+            ? `rgba(240, 184, 120, ${alpha})`
+            : `rgba(180, 215, 235, ${alpha})`
+
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.r * dpr, 0, Math.PI * 2)
+        ctx.fillStyle = color
+        ctx.fill()
+      }
+
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', resize)
+    }
+  }, [])
+
+  return <canvas ref={canvasRef} className="pool-particles" aria-hidden="true" />
+}
+
+/* ============================================================
    APP
    ============================================================ */
 
 export default function App() {
+  /* ---- daytime check ---- */
+  const isDaytime = useMemo(() => {
+    const h = new Date().getHours()
+    return h >= 6 && h < 18
+  }, [])
+
   /* ---- state ---- */
   const [soundOn, setSoundOn] = useState(false)
   const [visibleIndex, setVisibleIndex] = useState(-1)
@@ -246,15 +355,23 @@ export default function App() {
   const [isReturnVisitor, setIsReturnVisitor] = useState(false)
   const [visitorName, setVisitorName] = useState('')
   const [nameInput, setNameInput] = useState('')
+
+  const [bootPhase, setBootPhase] = useState<
+    'warning' | 'entering' | 'asking' | 'fading' | 'done'
+  >(isDaytime ? 'warning' : 'entering')
   const [typedText, setTypedText] = useState('')
-  const [loadingPhase, setLoadingPhase] = useState<
-    'typing' | 'asking' | 'fading' | 'done'
-  >('typing')
+  const [isHolding, setIsHolding] = useState(false)
+
+  const [visitCount, setVisitCount] = useState<number | null>(null)
+  const [stayToast, setStayToast] = useState(false)
+  const [showDepthBreak, setShowDepthBreak] = useState(false)
 
   /* ---- refs ---- */
   const audioCtxRef = useRef<AudioContext | null>(null)
   const masterGainRef = useRef<GainNode | null>(null)
   const eventsGainRef = useRef<GainNode | null>(null)
+  const pannerRef = useRef<StereoPannerNode | null>(null)
+
   const ratiosRef = useRef<Map<number, number>>(new Map())
   const lastPlayedIndexRef = useRef(-1)
   const freezeArmedRef = useRef(true)
@@ -271,6 +388,9 @@ export default function App() {
 
   const heartbeatTimerRef = useRef<number | null>(null)
   const heartbeatGainRef = useRef<GainNode | null>(null)
+
+  const keysBufferRef = useRef('')
+  const depthBreakShownRef = useRef(false)
 
   /* ------------------------------------------------------------
      1. Background gradient drifts with scroll
@@ -300,7 +420,48 @@ export default function App() {
   }, [])
 
   /* ------------------------------------------------------------
-     2. Reveal each depth section as it enters viewport
+     2. Parallax sinking — per-section offsets
+     ------------------------------------------------------------ */
+  useEffect(() => {
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const vh = window.innerHeight
+      const sections = document.querySelectorAll<HTMLElement>(
+        '.depth-section[data-index]',
+      )
+      sections.forEach((section) => {
+        const idx = section.dataset.index
+        if (idx === undefined || idx === '-1') return
+        const rect = section.getBoundingClientRect()
+        const center = rect.top + rect.height / 2
+        const offset = (center - vh / 2) / vh // roughly -1 → 1
+        section.style.setProperty(
+          '--parallax-slow',
+          `${(offset * 40).toFixed(2)}px`,
+        )
+        section.style.setProperty(
+          '--parallax-fast',
+          `${(offset * 70).toFixed(2)}px`,
+        )
+      })
+    }
+    const onScroll = () => {
+      if (raf) return
+      raf = window.requestAnimationFrame(update)
+    }
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [])
+
+  /* ------------------------------------------------------------
+     3. Reveal depth sections
      ------------------------------------------------------------ */
   useEffect(() => {
     const sections = Array.from(
@@ -332,20 +493,18 @@ export default function App() {
         rootMargin: '-4% 0px -4% 0px',
       },
     )
-
     sections.forEach((s) => observer.observe(s))
     return () => observer.disconnect()
-  }, [isReturnVisitor, loadingPhase])
+  }, [isReturnVisitor, bootPhase])
 
   /* ------------------------------------------------------------
-     3. Whispers observer
+     4. Whispers observer
      ------------------------------------------------------------ */
   useEffect(() => {
     const whispers = Array.from(
       document.querySelectorAll<HTMLElement>('.whisper'),
     )
     if (whispers.length === 0) return
-
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -354,24 +513,21 @@ export default function App() {
       },
       { threshold: 0.35, rootMargin: '-10% 0px -10% 0px' },
     )
-
     whispers.forEach((w) => observer.observe(w))
     return () => observer.disconnect()
-  }, [isReturnVisitor, loadingPhase])
+  }, [isReturnVisitor, bootPhase])
 
   /* ------------------------------------------------------------
-     4. Cursor light
+     5. Cursor light
      ------------------------------------------------------------ */
   useEffect(() => {
     const light = cursorLightRef.current
     if (!light) return
-
     let raf = 0
     let tx = window.innerWidth / 2
     let ty = window.innerHeight / 2
     let cx = tx
     let cy = ty
-
     const loop = () => {
       raf = 0
       cx += (tx - cx) * 0.08
@@ -382,13 +538,11 @@ export default function App() {
         raf = window.requestAnimationFrame(loop)
       }
     }
-
     const onMove = (e: PointerEvent) => {
       tx = e.clientX
       ty = e.clientY
       if (!raf) raf = window.requestAnimationFrame(loop)
     }
-
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => {
       window.removeEventListener('pointermove', onMove)
@@ -397,12 +551,26 @@ export default function App() {
   }, [])
 
   /* ------------------------------------------------------------
-     5. Click ripples
+     6. Directional audio — stereo pan follows pointer X
+     ------------------------------------------------------------ */
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const ctx = audioCtxRef.current
+      const panner = pannerRef.current
+      if (!ctx || !panner) return
+      const pan = (e.clientX / window.innerWidth) * 2 - 1
+      panner.pan.setTargetAtTime(pan, ctx.currentTime, 0.35)
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
+
+  /* ------------------------------------------------------------
+     7. Ripples on click
      ------------------------------------------------------------ */
   useEffect(() => {
     const container = ripplesRef.current
     if (!container) return
-
     const onPointerDown = (e: PointerEvent) => {
       const ripple = document.createElement('span')
       ripple.className = 'pool-ripple'
@@ -411,13 +579,12 @@ export default function App() {
       container.appendChild(ripple)
       window.setTimeout(() => ripple.remove(), 2400)
     }
-
     window.addEventListener('pointerdown', onPointerDown)
     return () => window.removeEventListener('pointerdown', onPointerDown)
   }, [])
 
   /* ------------------------------------------------------------
-     6. Live clock — ticks, snaps to 03:47 at Depth 03
+     8. Live clock → snaps to 03:47 at depth 03
      ------------------------------------------------------------ */
   useEffect(() => {
     const state = clockStateRef.current
@@ -449,39 +616,62 @@ export default function App() {
   }, [visibleIndex])
 
   /* ------------------------------------------------------------
-     7. Loading screen — typing effect
+     9. Boot sequence — types text, holds, advances phase
      ------------------------------------------------------------ */
+  const currentPhrase =
+    bootPhase === 'warning'
+      ? 'the pool is not open yet'
+      : 'entering the pool...'
+  const currentHold = bootPhase === 'warning' ? 4000 : 900
+
   useEffect(() => {
-    if (loadingPhase !== 'typing') return
-    if (typedText.length >= BOOT_TEXT.length) {
+    if (bootPhase !== 'warning' && bootPhase !== 'entering') return
+
+    if (isHolding) {
       const t = window.setTimeout(() => {
-        setLoadingPhase(visitorName ? 'fading' : 'asking')
-      }, 900)
+        setIsHolding(false)
+        setTypedText('')
+        if (bootPhase === 'warning') {
+          setBootPhase('entering')
+        } else {
+          setBootPhase(visitorName ? 'fading' : 'asking')
+        }
+      }, currentHold)
       return () => window.clearTimeout(t)
     }
-    const t = window.setTimeout(() => {
-      setTypedText(BOOT_TEXT.slice(0, typedText.length + 1))
-    }, 75)
-    return () => window.clearTimeout(t)
-  }, [typedText, loadingPhase, visitorName])
+
+    if (typedText.length < currentPhrase.length) {
+      const t = window.setTimeout(() => {
+        setTypedText(currentPhrase.slice(0, typedText.length + 1))
+      }, 75)
+      return () => window.clearTimeout(t)
+    }
+    setIsHolding(true)
+  }, [
+    typedText,
+    isHolding,
+    bootPhase,
+    currentPhrase,
+    currentHold,
+    visitorName,
+  ])
 
   /* ------------------------------------------------------------
-     8. Loading screen — fade-out
+     10. Boot fade-out
      ------------------------------------------------------------ */
   useEffect(() => {
-    if (loadingPhase !== 'fading') return
-    const t = window.setTimeout(() => setLoadingPhase('done'), 1700)
+    if (bootPhase !== 'fading') return
+    const t = window.setTimeout(() => setBootPhase('done'), 1700)
     return () => window.clearTimeout(t)
-  }, [loadingPhase])
+  }, [bootPhase])
 
   /* ------------------------------------------------------------
-     9. Load stored name + return-visitor flag
+     11. Read stored name + return visit flag
      ------------------------------------------------------------ */
   useEffect(() => {
     try {
       const storedName = window.localStorage.getItem('pool-name')
       if (storedName) setVisitorName(storedName)
-
       const visited = window.localStorage.getItem('pool-visited')
       if (visited) {
         setIsReturnVisitor(true)
@@ -489,15 +679,15 @@ export default function App() {
         window.localStorage.setItem('pool-visited', '1')
       }
     } catch {
-      /* localStorage unavailable */
+      /* ignore */
     }
   }, [])
 
   /* ------------------------------------------------------------
-     10. Lock scroll while loading screen is up
+     12. Lock scroll during loader
      ------------------------------------------------------------ */
   useEffect(() => {
-    if (loadingPhase === 'done') {
+    if (bootPhase === 'done') {
       document.body.style.overflow = ''
     } else {
       document.body.style.overflow = 'hidden'
@@ -505,26 +695,59 @@ export default function App() {
     return () => {
       document.body.style.overflow = ''
     }
-  }, [loadingPhase])
+  }, [bootPhase])
 
   /* ------------------------------------------------------------
-     11. Focus the name input when we ask
+     13. Focus name input
      ------------------------------------------------------------ */
   useEffect(() => {
-    if (loadingPhase !== 'asking') return
+    if (bootPhase !== 'asking') return
     const t = window.setTimeout(() => nameInputRef.current?.focus(), 400)
     return () => window.clearTimeout(t)
-  }, [loadingPhase])
+  }, [bootPhase])
 
   /* ------------------------------------------------------------
-     12. Sound layers on depth change
+     14. Visitor counter (Abacus — free, no auth)
+     ------------------------------------------------------------ */
+  useEffect(() => {
+    try {
+      const cached = window.sessionStorage.getItem('pool-count')
+      if (cached) {
+        setVisitCount(parseInt(cached, 10))
+        return
+      }
+    } catch {
+      /* ignore */
+    }
+    const today = new Date().toISOString().slice(0, 10)
+    const url = `https://abacus.jasoncameron.dev/hit/${ABACUS_NAMESPACE}/pool-${today}`
+    const ctrl = new AbortController()
+    fetch(url, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.value === 'number') {
+          setVisitCount(data.value)
+          try {
+            window.sessionStorage.setItem('pool-count', String(data.value))
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {
+        /* fail silently */
+      })
+    return () => ctrl.abort()
+  }, [])
+
+  /* ------------------------------------------------------------
+     15. Sound layers on depth change
      ------------------------------------------------------------ */
   useEffect(() => {
     if (!soundOn) return
     const ctx = audioCtxRef.current
     const events = eventsGainRef.current
     if (!ctx || !events) return
-
     const last = lastPlayedIndexRef.current
     if (last === visibleIndex) return
     lastPlayedIndexRef.current = visibleIndex
@@ -545,7 +768,7 @@ export default function App() {
   }, [visibleIndex, soundOn])
 
   /* ------------------------------------------------------------
-     13. Heartbeat — Depth 03 → 05, gated by sound
+     16. Heartbeat — depth 03 → 05
      ------------------------------------------------------------ */
   useEffect(() => {
     const stopHeartbeat = () => {
@@ -582,25 +805,20 @@ export default function App() {
         osc.type = 'sine'
         osc.frequency.setValueAtTime(72, t)
         osc.frequency.exponentialRampToValueAtTime(34, t + 0.16)
-
         const g = ctx.createGain()
         g.gain.setValueAtTime(0.0001, t)
         g.gain.linearRampToValueAtTime(amp, t + 0.014)
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3)
-
         osc.connect(g).connect(hbGain)
         osc.start(t)
         osc.stop(t + 0.32)
       }
-
       const beat = () => {
         thump(0, 0.75)
         thump(0.13, 0.45)
       }
-
       beat()
       heartbeatTimerRef.current = window.setInterval(beat, 1500)
-
       const t = ctx.currentTime
       hbGain.gain.cancelScheduledValues(t)
       hbGain.gain.setValueAtTime(0, t)
@@ -611,7 +829,6 @@ export default function App() {
       stopHeartbeat()
       return
     }
-
     if (visibleIndex >= 2 && visibleIndex <= 4) {
       startHeartbeat()
     } else {
@@ -620,7 +837,97 @@ export default function App() {
   }, [soundOn, visibleIndex])
 
   /* ------------------------------------------------------------
-     14. Name submit
+     17. Random image blinks — one flicker every 90–180s
+     ------------------------------------------------------------ */
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let cancelled = false
+    let tid: number | null = null
+
+    const schedule = () => {
+      const delay = 90000 + Math.random() * 90000
+      tid = window.setTimeout(() => {
+        if (cancelled) return
+        const visible = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '.depth-section.is-visible[data-index]',
+          ),
+        ).filter((s) => s.dataset.index !== '-1')
+        if (visible.length > 0) {
+          const target = visible[Math.floor(Math.random() * visible.length)]
+          target.classList.add('is-blinking')
+          window.setTimeout(() => target.classList.remove('is-blinking'), 180)
+        }
+        schedule()
+      }, delay)
+    }
+    schedule()
+    return () => {
+      cancelled = true
+      if (tid !== null) window.clearTimeout(tid)
+    }
+  }, [bootPhase])
+
+  /* ------------------------------------------------------------
+     18. Depth 06 break — one-time whisper at the bottom
+     ------------------------------------------------------------ */
+  useEffect(() => {
+    if (visibleIndex !== 5) return
+    if (depthBreakShownRef.current) return
+    let alreadySeen = false
+    try {
+      alreadySeen = sessionStorage.getItem('pool-depthbreak') === '1'
+    } catch {
+      /* ignore */
+    }
+    if (alreadySeen) return
+    depthBreakShownRef.current = true
+    setShowDepthBreak(true)
+    try {
+      sessionStorage.setItem('pool-depthbreak', '1')
+    } catch {
+      /* ignore */
+    }
+    const t = window.setTimeout(() => setShowDepthBreak(false), 3200)
+    return () => window.clearTimeout(t)
+  }, [visibleIndex])
+
+  /* ------------------------------------------------------------
+     19. Hidden words — "surface" and "stay"
+     ------------------------------------------------------------ */
+  const returnToSurface = useCallback(() => {
+    clockStateRef.current = {
+      wallMs: randomRooftopTime(),
+      anchorMs: Date.now(),
+      frozen: false,
+    }
+    freezeArmedRef.current = false
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (e.key.length !== 1) return
+      keysBufferRef.current = (keysBufferRef.current + e.key.toLowerCase()).slice(
+        -20,
+      )
+      if (keysBufferRef.current.endsWith('surface')) {
+        keysBufferRef.current = ''
+        returnToSurface()
+      } else if (keysBufferRef.current.endsWith('stay')) {
+        keysBufferRef.current = ''
+        setStayToast(true)
+        window.setTimeout(() => setStayToast(false), 3000)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [returnToSurface])
+
+  /* ------------------------------------------------------------
+     20. Name submit
      ------------------------------------------------------------ */
   const handleNameSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -633,13 +940,13 @@ export default function App() {
       } catch {
         /* ignore */
       }
-      setLoadingPhase('fading')
+      setBootPhase('fading')
     },
     [nameInput],
   )
 
   /* ------------------------------------------------------------
-     15. Sound toggle
+     21. Sound toggle
      ------------------------------------------------------------ */
   const toggleSound = useCallback(() => {
     const AudioCtor = window.AudioContext
@@ -650,7 +957,11 @@ export default function App() {
 
       const master = ctx.createGain()
       master.gain.value = 0
-      master.connect(ctx.destination)
+
+      const panner = ctx.createStereoPanner()
+      panner.pan.value = 0
+
+      master.connect(panner).connect(ctx.destination)
 
       const humGain = ctx.createGain()
       humGain.gain.value = 0.02
@@ -685,6 +996,7 @@ export default function App() {
       audioCtxRef.current = ctx
       masterGainRef.current = master
       eventsGainRef.current = eventsGain
+      pannerRef.current = panner
     }
 
     const ctx = audioCtxRef.current
@@ -708,7 +1020,7 @@ export default function App() {
   }, [soundOn, visibleIndex])
 
   /* ------------------------------------------------------------
-     16. Cleanup audio on unmount
+     22. Cleanup audio
      ------------------------------------------------------------ */
   useEffect(() => {
     return () => {
@@ -720,49 +1032,80 @@ export default function App() {
       audioCtxRef.current = null
       masterGainRef.current = null
       eventsGainRef.current = null
+      pannerRef.current = null
       heartbeatGainRef.current = null
       if (ctx && ctx.state !== 'closed') void ctx.close()
     }
   }, [])
 
   /* ------------------------------------------------------------
-     17. Return to surface — new random hero time
+     RENDER
      ------------------------------------------------------------ */
-  const returnToSurface = useCallback(() => {
-    clockStateRef.current = {
-      wallMs: randomRooftopTime(),
-      anchorMs: Date.now(),
-      frozen: false,
-    }
-    freezeArmedRef.current = false
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
 
   const depthLabel =
     visibleIndex >= 0 ? String(visibleIndex + 1).padStart(2, '0') : '00'
+  const finalGuestName = visitorName ? visitorName.toUpperCase() : 'you'
 
-  const finalGuestName = visitorName
-    ? visitorName.toUpperCase()
-    : 'you'
-
-  const loadingClass =
-    loadingPhase === 'done'
+  const loaderClass =
+    bootPhase === 'done'
       ? 'pool-loader is-hidden'
-      : loadingPhase === 'fading'
+      : bootPhase === 'fading'
         ? 'pool-loader is-fading'
         : 'pool-loader'
 
   return (
     <div className="pool-app">
+      {/* ---------- wet filter SVG defs ---------- */}
+      <svg
+        className="pool-filter-defs"
+        aria-hidden="true"
+        focusable="false"
+        width="0"
+        height="0"
+      >
+        <defs>
+          <filter
+            id="pool-wet"
+            x="-15%"
+            y="-15%"
+            width="130%"
+            height="130%"
+          >
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.008 0.02"
+              numOctaves={2}
+              seed={4}
+              result="noise"
+            >
+              <animate
+                attributeName="baseFrequency"
+                dur="8s"
+                values="0.008 0.02; 0.014 0.032; 0.008 0.02"
+                repeatCount="indefinite"
+              />
+            </feTurbulence>
+            <feDisplacementMap
+              in="SourceGraphic"
+              in2="noise"
+              scale={5}
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+        </defs>
+      </svg>
+
       {/* ---------- loading screen ---------- */}
-      {loadingPhase !== 'done' && (
-        <div className={loadingClass} aria-hidden={loadingPhase === 'fading'}>
+      {bootPhase !== 'done' && (
+        <div className={loaderClass} aria-hidden={bootPhase === 'fading'}>
           <p className="pool-loader-text">
             {typedText}
-            {loadingPhase === 'typing' && <span className="caret" />}
+            {(bootPhase === 'warning' || bootPhase === 'entering') &&
+              !isHolding && <span className="caret" />}
           </p>
 
-          {loadingPhase === 'asking' && (
+          {bootPhase === 'asking' && (
             <form className="name-prompt" onSubmit={handleNameSubmit}>
               <label htmlFor="visitor-name">what should we call you?</label>
               <input
@@ -785,6 +1128,7 @@ export default function App() {
       {/* ---------- fixed layers ---------- */}
       <div className="pool-bg" aria-hidden="true" />
       <div className="pool-caustics" aria-hidden="true" />
+      <Particles />
       <div className="pool-grain" aria-hidden="true" />
 
       <div ref={cursorLightRef} className="cursor-light" aria-hidden="true" />
@@ -800,6 +1144,12 @@ export default function App() {
         <span className="dot" aria-hidden="true" />
         {soundOn ? 'Sound on' : 'Sound off'}
       </button>
+
+      {stayToast && (
+        <div className="stay-toast" role="status">
+          you can't.
+        </div>
+      )}
 
       <main>
         {/* ---------- hero ---------- */}
@@ -841,6 +1191,12 @@ export default function App() {
                 <h2>{depth.line}</h2>
                 <p>{depth.caption}</p>
               </div>
+
+              {index === 5 && showDepthBreak && (
+                <div className="depth-break" aria-hidden="true">
+                  this website is watching you back
+                </div>
+              )}
             </section>
 
             {index < depths.length - 1 && (
@@ -879,7 +1235,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* ---------- depth 07 (return visitors) ---------- */}
+        {/* ---------- depth 07 ---------- */}
         {isReturnVisitor && (
           <section className="depth-section depth-seven" data-index={-1}>
             <div className="depth-text">
@@ -899,6 +1255,13 @@ export default function App() {
             <span className="depth-counter">{depthLabel}</span> /{' '}
             {String(TOTAL_DEPTHS).padStart(2, '0')}
           </p>
+
+          {visitCount !== null && (
+            <p className="visitor-counter">
+              you are the {ordinal(visitCount)} tonight
+            </p>
+          )}
+
           <button
             type="button"
             className="surface-link"
@@ -906,6 +1269,10 @@ export default function App() {
           >
             ↑ Surface
           </button>
+
+          <p className="pool-footnote">
+            v1.0 · last updated 03:47 AM
+          </p>
         </footer>
       </main>
     </div>
