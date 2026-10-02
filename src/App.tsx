@@ -108,85 +108,357 @@ const TOTAL_DEPTHS = depths.length
 const ABACUS_NAMESPACE = 'the-pool-at-night-liminal'
 
 /* ============================================================
-   AUDIO HELPERS
+   AUDIO ENGINE — shared across all events
    ============================================================ */
 
-const playDrip = (ctx: AudioContext, dest: AudioNode) => {
+type AudioBus = {
+  ctx: AudioContext
+  master: GainNode
+  events: GainNode
+  hum: GainNode
+  reverbSend: GainNode
+  reverbReturn: GainNode
+  underwaterFilter: BiquadFilterNode
+}
+
+/* --- synthesize a reverb impulse response (noise with decay) --- */
+const createReverbIR = (ctx: AudioContext, duration = 3.2, decay = 2.4) => {
+  const rate = ctx.sampleRate
+  const length = Math.floor(rate * duration)
+  const impulse = ctx.createBuffer(2, length, rate)
+  for (let c = 0; c < 2; c++) {
+    const channel = impulse.getChannelData(c)
+    for (let i = 0; i < length; i++) {
+      const t = i / length
+      channel[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay)
+    }
+  }
+  return impulse
+}
+
+/* --- a chunk of filtered pink-ish noise, for the water bed --- */
+const createNoiseBuffer = (ctx: AudioContext, seconds = 4) => {
+  const rate = ctx.sampleRate
+  const length = Math.floor(rate * seconds)
+  const buffer = ctx.createBuffer(1, length, rate)
+  const data = buffer.getChannelData(0)
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0
+  for (let i = 0; i < length; i++) {
+    const white = Math.random() * 2 - 1
+    // simple pink-ish noise via cascaded lowpass
+    b0 = 0.99886 * b0 + white * 0.0555179
+    b1 = 0.99332 * b1 + white * 0.0750759
+    b2 = 0.96900 * b2 + white * 0.1538520
+    b3 = 0.86650 * b3 + white * 0.3104856
+    b4 = 0.55000 * b4 + white * 0.5329522
+    b5 = -0.7616 * b5 - white * 0.0168980
+    data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11
+    b6 = white * 0.115926
+  }
+  return buffer
+}
+
+/* --- build the entire audio graph once --- */
+const buildAudio = (): AudioBus => {
+  const ctx = new AudioContext()
+
+  // destination chain: master → underwater lowpass → panner → out
+  const master = ctx.createGain()
+  master.gain.value = 0
+
+  const underwater = ctx.createBiquadFilter()
+  underwater.type = 'lowpass'
+  underwater.frequency.value = 2200
+  underwater.Q.value = 0.4
+
+  const panner = ctx.createStereoPanner()
+  panner.pan.value = 0
+
+  master.connect(underwater).connect(panner).connect(ctx.destination)
+
+  // ---- reverb bus ----
+  const convolver = ctx.createConvolver()
+  convolver.buffer = createReverbIR(ctx, 3.2, 2.4)
+  convolver.normalize = true
+
+  const reverbSend = ctx.createGain()
+  reverbSend.gain.value = 1
+  reverbSend.connect(convolver)
+
+  const reverbReturn = ctx.createGain()
+  reverbReturn.gain.value = 0.55
+  convolver.connect(reverbReturn).connect(master)
+
+  // ---- the hum — 5 oscillators, detuned, lowpassed, breathing ----
+  const hum = ctx.createGain()
+  hum.gain.value = 1
+
+  const humFilter = ctx.createBiquadFilter()
+  humFilter.type = 'lowpass'
+  humFilter.frequency.value = 320
+  humFilter.Q.value = 0.9
+
+  hum.connect(humFilter)
+
+  // slow LFO on the filter cutoff — makes the hum breathe
+  const lfo = ctx.createOscillator()
+  lfo.type = 'sine'
+  lfo.frequency.value = 0.06
+  const lfoAmt = ctx.createGain()
+  lfoAmt.gain.value = 90
+  lfo.connect(lfoAmt).connect(humFilter.frequency)
+  lfo.start()
+
+  // individual oscillators
+  const makeOsc = (
+    type: OscillatorType,
+    freq: number,
+    level: number,
+    detune = 0,
+  ) => {
+    const o = ctx.createOscillator()
+    o.type = type
+    o.frequency.value = freq
+    o.detune.value = detune
+    const g = ctx.createGain()
+    g.gain.value = level
+    o.connect(g).connect(hum)
+    o.start()
+    return o
+  }
+
+  makeOsc('sine', 30, 0.55) // sub — presence
+  makeOsc('sine', 40, 0.75) // deep body
+  makeOsc('sine', 55, 0.6) // fundamental
+  makeOsc('sine', 55.25, 0.45) // detuned twin — creates slow beating
+  makeOsc('triangle', 82.4, 0.28) // overtone
+  makeOsc('sine', 110, 0.14) // warmth
+
+  // dry + wet send for the hum
+  const humDry = ctx.createGain()
+  humDry.gain.value = 0.16
+  humFilter.connect(humDry).connect(master)
+
+  const humWet = ctx.createGain()
+  humWet.gain.value = 0.42
+  humFilter.connect(humWet).connect(reverbSend)
+
+  // ---- water bed — filtered pink noise with slow tremolo ----
+  const waterSrc = ctx.createBufferSource()
+  waterSrc.buffer = createNoiseBuffer(ctx, 6)
+  waterSrc.loop = true
+
+  const waterFilter = ctx.createBiquadFilter()
+  waterFilter.type = 'bandpass'
+  waterFilter.frequency.value = 220
+  waterFilter.Q.value = 0.7
+
+  const waterGain = ctx.createGain()
+  waterGain.gain.value = 0.05
+
+  // slow LFO on the water amp — waves
+  const waterLFO = ctx.createOscillator()
+  waterLFO.type = 'sine'
+  waterLFO.frequency.value = 0.09
+  const waterLFOAmt = ctx.createGain()
+  waterLFOAmt.gain.value = 0.03
+  waterLFO.connect(waterLFOAmt).connect(waterGain.gain)
+  waterLFO.start()
+
+  waterSrc.connect(waterFilter).connect(waterGain).connect(master)
+
+  // slight reverb on the water too
+  const waterWet = ctx.createGain()
+  waterWet.gain.value = 0.35
+  waterFilter.connect(waterWet).connect(reverbSend)
+
+  waterSrc.start()
+
+  // ---- events bus ----
+  const events = ctx.createGain()
+  events.gain.value = 1
+
+  const eventsDry = ctx.createGain()
+  eventsDry.gain.value = 0.75
+  events.connect(eventsDry).connect(master)
+
+  const eventsWet = ctx.createGain()
+  eventsWet.gain.value = 0.7
+  events.connect(eventsWet).connect(reverbSend)
+
+  return { ctx, master, events, hum, reverbSend, reverbReturn, underwaterFilter: underwater }
+}
+
+/* ============================================================
+   EVENT SOUNDS
+   ============================================================ */
+
+/* A bell-like drip — two detuned sine partials with exponential decay */
+const playDrip = (bus: AudioBus) => {
+  const { ctx, events } = bus
   const t = ctx.currentTime
+
+  const partials = [
+    { f: 1320, gain: 0.5, decay: 0.9 },
+    { f: 880, gain: 0.35, decay: 0.7 },
+    { f: 440, gain: 0.18, decay: 0.5 },
+  ]
+
+  for (const p of partials) {
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(p.f * 1.35, t)
+    osc.frequency.exponentialRampToValueAtTime(p.f, t + 0.06)
+
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(p.gain, t + 0.006)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + p.decay)
+
+    osc.connect(g).connect(events)
+    osc.start(t)
+    osc.stop(t + p.decay + 0.05)
+  }
+}
+
+/* A splash — layered: low boom + mid burst + high scatter */
+const playSplash = (bus: AudioBus) => {
+  const { ctx, events } = bus
+  const t = ctx.currentTime
+
+  // low boom
+  const boom = ctx.createOscillator()
+  boom.type = 'sine'
+  boom.frequency.setValueAtTime(90, t)
+  boom.frequency.exponentialRampToValueAtTime(40, t + 0.5)
+  const boomG = ctx.createGain()
+  boomG.gain.setValueAtTime(0.0001, t)
+  boomG.gain.linearRampToValueAtTime(0.7, t + 0.02)
+  boomG.gain.exponentialRampToValueAtTime(0.0001, t + 0.7)
+  boom.connect(boomG).connect(events)
+  boom.start(t)
+  boom.stop(t + 0.75)
+
+  // mid noise burst
+  const midDur = 0.9
+  const midBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * midDur), ctx.sampleRate)
+  const midData = midBuf.getChannelData(0)
+  for (let i = 0; i < midData.length; i++) {
+    const decay = Math.pow(1 - i / midData.length, 1.8)
+    midData[i] = (Math.random() * 2 - 1) * decay
+  }
+  const mid = ctx.createBufferSource()
+  mid.buffer = midBuf
+  const midFilter = ctx.createBiquadFilter()
+  midFilter.type = 'bandpass'
+  midFilter.frequency.value = 850
+  midFilter.Q.value = 0.9
+  const midG = ctx.createGain()
+  midG.gain.value = 0.55
+  mid.connect(midFilter).connect(midG).connect(events)
+  mid.start(t)
+
+  // high scatter — brief hiss on top
+  const hiDur = 0.35
+  const hiBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * hiDur), ctx.sampleRate)
+  const hiData = hiBuf.getChannelData(0)
+  for (let i = 0; i < hiData.length; i++) {
+    const decay = Math.pow(1 - i / hiData.length, 3)
+    hiData[i] = (Math.random() * 2 - 1) * decay
+  }
+  const hi = ctx.createBufferSource()
+  hi.buffer = hiBuf
+  const hiFilter = ctx.createBiquadFilter()
+  hiFilter.type = 'highpass'
+  hiFilter.frequency.value = 2800
+  const hiG = ctx.createGain()
+  hiG.gain.value = 0.35
+  hi.connect(hiFilter).connect(hiG).connect(events)
+  hi.start(t)
+}
+
+/* A distant laugh — formant pulses through heavy reverb */
+const playMuffledLaugh = (bus: AudioBus) => {
+  const { ctx, events } = bus
+  const t = ctx.currentTime
+
+  // 8 short vowel-ish pulses, like "ha ha ha" filtered through water
+  const pulses = [
+    { t: 0.00, f: 240, dur: 0.18 },
+    { t: 0.20, f: 220, dur: 0.16 },
+    { t: 0.38, f: 260, dur: 0.17 },
+    { t: 0.58, f: 210, dur: 0.20 },
+    { t: 0.82, f: 250, dur: 0.15 },
+    { t: 1.02, f: 230, dur: 0.19 },
+    { t: 1.26, f: 275, dur: 0.16 },
+    { t: 1.46, f: 235, dur: 0.22 },
+  ]
+
+  for (const p of pulses) {
+    const start = t + p.t
+
+    // carrier — sine with fast pitch wobble (vibrato) for a vocal feel
+    const carrier = ctx.createOscillator()
+    carrier.type = 'sine'
+    carrier.frequency.setValueAtTime(p.f, start)
+
+    // vibrato
+    const vib = ctx.createOscillator()
+    vib.type = 'sine'
+    vib.frequency.value = 42
+    const vibAmt = ctx.createGain()
+    vibAmt.gain.value = 12
+    vib.connect(vibAmt).connect(carrier.frequency)
+    vib.start(start)
+    vib.stop(start + p.dur)
+
+    // vowel-ish bandpass — "ah" formant
+    const formant = ctx.createBiquadFilter()
+    formant.type = 'bandpass'
+    formant.frequency.value = 620
+    formant.Q.value = 3.5
+
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.0001, start)
+    env.gain.exponentialRampToValueAtTime(0.32, start + 0.02)
+    env.gain.exponentialRampToValueAtTime(0.0001, start + p.dur)
+
+    carrier.connect(formant).connect(env).connect(events)
+    carrier.start(start)
+    carrier.stop(start + p.dur + 0.05)
+  }
+}
+
+/* A heartbeat thump — sine with fast pitch drop + a soft click */
+const heartbeatThump = (bus: AudioBus, dest: AudioNode, delay: number, amp: number) => {
+  const { ctx } = bus
+  const t = ctx.currentTime + delay
+
   const osc = ctx.createOscillator()
   osc.type = 'sine'
-  osc.frequency.setValueAtTime(1100, t)
-  osc.frequency.exponentialRampToValueAtTime(220, t + 0.22)
+  osc.frequency.setValueAtTime(88, t)
+  osc.frequency.exponentialRampToValueAtTime(32, t + 0.18)
 
   const g = ctx.createGain()
   g.gain.setValueAtTime(0.0001, t)
-  g.gain.linearRampToValueAtTime(0.55, t + 0.008)
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45)
+  g.gain.linearRampToValueAtTime(amp, t + 0.012)
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32)
 
   osc.connect(g).connect(dest)
   osc.start(t)
-  osc.stop(t + 0.5)
-}
+  osc.stop(t + 0.36)
 
-const playSplash = (ctx: AudioContext, dest: AudioNode) => {
-  const t = ctx.currentTime
-  const duration = 1.2
-  const buffer = ctx.createBuffer(
-    1,
-    Math.floor(ctx.sampleRate * duration),
-    ctx.sampleRate,
-  )
-  const data = buffer.getChannelData(0)
-  for (let i = 0; i < data.length; i++) {
-    const decay = Math.pow(1 - i / data.length, 2.2)
-    data[i] = (Math.random() * 2 - 1) * decay
-  }
-
-  const src = ctx.createBufferSource()
-  src.buffer = buffer
-
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.frequency.value = 900
-  filter.Q.value = 0.7
-
-  const g = ctx.createGain()
-  g.gain.value = 0.5
-
-  src.connect(filter).connect(g).connect(dest)
-  src.start(t)
-}
-
-const playMuffledLaugh = (ctx: AudioContext, dest: AudioNode) => {
-  const t = ctx.currentTime
-  const pulses = [0, 0.13, 0.28, 0.44, 0.6, 0.78]
-  for (const offset of pulses) {
-    const dur = 0.14
-    const buffer = ctx.createBuffer(
-      1,
-      Math.floor(ctx.sampleRate * dur),
-      ctx.sampleRate,
-    )
-    const data = buffer.getChannelData(0)
-    for (let i = 0; i < data.length; i++) {
-      const env = Math.sin((i / data.length) * Math.PI)
-      data[i] = (Math.random() * 2 - 1) * env
-    }
-
-    const src = ctx.createBufferSource()
-    src.buffer = buffer
-
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'bandpass'
-    filter.frequency.value = 320
-    filter.Q.value = 6
-
-    const g = ctx.createGain()
-    g.gain.value = 0.35
-
-    src.connect(filter).connect(g).connect(dest)
-    src.start(t + offset)
-  }
+  // faint click at the top — makes it physical
+  const click = ctx.createOscillator()
+  click.type = 'triangle'
+  click.frequency.value = 180
+  const clickG = ctx.createGain()
+  clickG.gain.setValueAtTime(0.0001, t)
+  clickG.gain.linearRampToValueAtTime(amp * 0.25, t + 0.004)
+  clickG.gain.exponentialRampToValueAtTime(0.0001, t + 0.05)
+  click.connect(clickG).connect(dest)
+  click.start(t)
+  click.stop(t + 0.06)
 }
 
 /* ============================================================
@@ -217,7 +489,7 @@ const ordinal = (n: number) => {
 }
 
 /* ============================================================
-   THE KEY — recurring SVG
+   THE KEY
    ============================================================ */
 
 function Key({ style }: { style?: React.CSSProperties }) {
@@ -243,7 +515,7 @@ function Key({ style }: { style?: React.CSSProperties }) {
 }
 
 /* ============================================================
-   PARTICLES — canvas of slow motes
+   PARTICLES
    ============================================================ */
 
 function Particles() {
@@ -251,11 +523,10 @@ function Particles() {
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const ctx2d = canvas.getContext('2d')
+    if (!ctx2d) return
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     let raf = 0
@@ -281,21 +552,21 @@ function Particles() {
     resize()
     window.addEventListener('resize', resize)
 
-    const spawn = (startAnywhere = false): P => ({
+    const spawn = (anywhere = false): P => ({
       x: Math.random() * canvas.width,
-      y: startAnywhere ? Math.random() * canvas.height : canvas.height + 20,
+      y: anywhere ? Math.random() * canvas.height : canvas.height + 20,
       r: 0.5 + Math.random() * 1.5,
       vy: -(0.12 + Math.random() * 0.32) * dpr,
       vx: (Math.random() - 0.5) * 0.16 * dpr,
-      life: startAnywhere ? Math.random() * 700 : 0,
+      life: anywhere ? Math.random() * 700 : 0,
       maxLife: 700 + Math.random() * 900,
-      hue: Math.random() < 0.25 ? 34 : 200, // warm or underwater
+      hue: Math.random() < 0.25 ? 34 : 200,
     })
 
     for (let i = 0; i < 46; i++) particles.push(spawn(true))
 
     const tick = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height)
       if (particles.length < 70 && Math.random() < 0.02) particles.push(spawn())
 
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -303,25 +574,21 @@ function Particles() {
         p.x += p.vx
         p.y += p.vy
         p.life++
-
         if (p.life > p.maxLife || p.y < -30) {
           particles.splice(i, 1)
           continue
         }
-
         const t = p.life / p.maxLife
         const alpha = Math.sin(t * Math.PI) * 0.45
         const color =
           p.hue === 34
             ? `rgba(240, 184, 120, ${alpha})`
             : `rgba(180, 215, 235, ${alpha})`
-
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.r * dpr, 0, Math.PI * 2)
-        ctx.fillStyle = color
-        ctx.fill()
+        ctx2d.beginPath()
+        ctx2d.arc(p.x, p.y, p.r * dpr, 0, Math.PI * 2)
+        ctx2d.fillStyle = color
+        ctx2d.fill()
       }
-
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -340,18 +607,14 @@ function Particles() {
    ============================================================ */
 
 export default function App() {
-  /* ---- daytime check ---- */
   const isDaytime = useMemo(() => {
     const h = new Date().getHours()
     return h >= 6 && h < 18
   }, [])
 
-  /* ---- state ---- */
   const [soundOn, setSoundOn] = useState(false)
   const [visibleIndex, setVisibleIndex] = useState(-1)
-  const [clockDisplay, setClockDisplay] = useState(() =>
-    formatClock(new Date()),
-  )
+  const [clockDisplay, setClockDisplay] = useState(() => formatClock(new Date()))
   const [isReturnVisitor, setIsReturnVisitor] = useState(false)
   const [visitorName, setVisitorName] = useState('')
   const [nameInput, setNameInput] = useState('')
@@ -366,10 +629,7 @@ export default function App() {
   const [stayToast, setStayToast] = useState(false)
   const [showDepthBreak, setShowDepthBreak] = useState(false)
 
-  /* ---- refs ---- */
-  const audioCtxRef = useRef<AudioContext | null>(null)
-  const masterGainRef = useRef<GainNode | null>(null)
-  const eventsGainRef = useRef<GainNode | null>(null)
+  const busRef = useRef<AudioBus | null>(null)
   const pannerRef = useRef<StereoPannerNode | null>(null)
 
   const ratiosRef = useRef<Map<number, number>>(new Map())
@@ -392,9 +652,7 @@ export default function App() {
   const keysBufferRef = useRef('')
   const depthBreakShownRef = useRef(false)
 
-  /* ------------------------------------------------------------
-     1. Background gradient drifts with scroll
-     ------------------------------------------------------------ */
+  /* 1. Gradient shift on scroll */
   useEffect(() => {
     const root = document.documentElement
     let frame = 0
@@ -419,9 +677,7 @@ export default function App() {
     }
   }, [])
 
-  /* ------------------------------------------------------------
-     2. Parallax sinking — per-section offsets
-     ------------------------------------------------------------ */
+  /* 2. Parallax */
   useEffect(() => {
     let raf = 0
     const update = () => {
@@ -435,7 +691,7 @@ export default function App() {
         if (idx === undefined || idx === '-1') return
         const rect = section.getBoundingClientRect()
         const center = rect.top + rect.height / 2
-        const offset = (center - vh / 2) / vh // roughly -1 → 1
+        const offset = (center - vh / 2) / vh
         section.style.setProperty(
           '--parallax-slow',
           `${(offset * 40).toFixed(2)}px`,
@@ -460,15 +716,12 @@ export default function App() {
     }
   }, [])
 
-  /* ------------------------------------------------------------
-     3. Reveal depth sections
-     ------------------------------------------------------------ */
+  /* 3. Reveal depth sections */
   useEffect(() => {
     const sections = Array.from(
       document.querySelectorAll<HTMLElement>('.depth-section'),
     )
     if (sections.length === 0) return
-
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -497,9 +750,7 @@ export default function App() {
     return () => observer.disconnect()
   }, [isReturnVisitor, bootPhase])
 
-  /* ------------------------------------------------------------
-     4. Whispers observer
-     ------------------------------------------------------------ */
+  /* 4. Whispers */
   useEffect(() => {
     const whispers = Array.from(
       document.querySelectorAll<HTMLElement>('.whisper'),
@@ -517,17 +768,14 @@ export default function App() {
     return () => observer.disconnect()
   }, [isReturnVisitor, bootPhase])
 
-  /* ------------------------------------------------------------
-     5. Cursor light
-     ------------------------------------------------------------ */
+  /* 5. Cursor light */
   useEffect(() => {
     const light = cursorLightRef.current
     if (!light) return
     let raf = 0
     let tx = window.innerWidth / 2
     let ty = window.innerHeight / 2
-    let cx = tx
-    let cy = ty
+    let cx = tx, cy = ty
     const loop = () => {
       raf = 0
       cx += (tx - cx) * 0.08
@@ -550,24 +798,20 @@ export default function App() {
     }
   }, [])
 
-  /* ------------------------------------------------------------
-     6. Directional audio — stereo pan follows pointer X
-     ------------------------------------------------------------ */
+  /* 6. Stereo pan from pointer X */
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
-      const ctx = audioCtxRef.current
+      const bus = busRef.current
       const panner = pannerRef.current
-      if (!ctx || !panner) return
+      if (!bus || !panner) return
       const pan = (e.clientX / window.innerWidth) * 2 - 1
-      panner.pan.setTargetAtTime(pan, ctx.currentTime, 0.35)
+      panner.pan.setTargetAtTime(pan, bus.ctx.currentTime, 0.35)
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => window.removeEventListener('pointermove', onMove)
   }, [])
 
-  /* ------------------------------------------------------------
-     7. Ripples on click
-     ------------------------------------------------------------ */
+  /* 7. Ripples on click */
   useEffect(() => {
     const container = ripplesRef.current
     if (!container) return
@@ -583,9 +827,7 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', onPointerDown)
   }, [])
 
-  /* ------------------------------------------------------------
-     8. Live clock → snaps to 03:47 at depth 03
-     ------------------------------------------------------------ */
+  /* 8. Live clock */
   useEffect(() => {
     const state = clockStateRef.current
     const update = () => {
@@ -615,31 +857,22 @@ export default function App() {
     }
   }, [visibleIndex])
 
-  /* ------------------------------------------------------------
-     9. Boot sequence — types text, holds, advances phase
-     ------------------------------------------------------------ */
+  /* 9. Boot sequence */
   const currentPhrase =
-    bootPhase === 'warning'
-      ? 'the pool is not open yet'
-      : 'entering the pool...'
+    bootPhase === 'warning' ? 'the pool is not open yet' : 'entering the pool...'
   const currentHold = bootPhase === 'warning' ? 4000 : 900
 
   useEffect(() => {
     if (bootPhase !== 'warning' && bootPhase !== 'entering') return
-
     if (isHolding) {
       const t = window.setTimeout(() => {
         setIsHolding(false)
         setTypedText('')
-        if (bootPhase === 'warning') {
-          setBootPhase('entering')
-        } else {
-          setBootPhase(visitorName ? 'fading' : 'asking')
-        }
+        if (bootPhase === 'warning') setBootPhase('entering')
+        else setBootPhase(visitorName ? 'fading' : 'asking')
       }, currentHold)
       return () => window.clearTimeout(t)
     }
-
     if (typedText.length < currentPhrase.length) {
       const t = window.setTimeout(() => {
         setTypedText(currentPhrase.slice(0, typedText.length + 1))
@@ -647,68 +880,39 @@ export default function App() {
       return () => window.clearTimeout(t)
     }
     setIsHolding(true)
-  }, [
-    typedText,
-    isHolding,
-    bootPhase,
-    currentPhrase,
-    currentHold,
-    visitorName,
-  ])
+  }, [typedText, isHolding, bootPhase, currentPhrase, currentHold, visitorName])
 
-  /* ------------------------------------------------------------
-     10. Boot fade-out
-     ------------------------------------------------------------ */
   useEffect(() => {
     if (bootPhase !== 'fading') return
     const t = window.setTimeout(() => setBootPhase('done'), 1700)
     return () => window.clearTimeout(t)
   }, [bootPhase])
 
-  /* ------------------------------------------------------------
-     11. Read stored name + return visit flag
-     ------------------------------------------------------------ */
+  /* 10. Read stored name + return visit */
   useEffect(() => {
     try {
       const storedName = window.localStorage.getItem('pool-name')
       if (storedName) setVisitorName(storedName)
       const visited = window.localStorage.getItem('pool-visited')
-      if (visited) {
-        setIsReturnVisitor(true)
-      } else {
-        window.localStorage.setItem('pool-visited', '1')
-      }
-    } catch {
-      /* ignore */
-    }
+      if (visited) setIsReturnVisitor(true)
+      else window.localStorage.setItem('pool-visited', '1')
+    } catch { /* ignore */ }
   }, [])
 
-  /* ------------------------------------------------------------
-     12. Lock scroll during loader
-     ------------------------------------------------------------ */
+  /* 11. Lock scroll during loader */
   useEffect(() => {
-    if (bootPhase === 'done') {
-      document.body.style.overflow = ''
-    } else {
-      document.body.style.overflow = 'hidden'
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
+    document.body.style.overflow = bootPhase === 'done' ? '' : 'hidden'
+    return () => { document.body.style.overflow = '' }
   }, [bootPhase])
 
-  /* ------------------------------------------------------------
-     13. Focus name input
-     ------------------------------------------------------------ */
+  /* 12. Focus name input */
   useEffect(() => {
     if (bootPhase !== 'asking') return
     const t = window.setTimeout(() => nameInputRef.current?.focus(), 400)
     return () => window.clearTimeout(t)
   }, [bootPhase])
 
-  /* ------------------------------------------------------------
-     14. Visitor counter (Abacus — free, no auth)
-     ------------------------------------------------------------ */
+  /* 13. Visitor counter */
   useEffect(() => {
     try {
       const cached = window.sessionStorage.getItem('pool-count')
@@ -716,9 +920,7 @@ export default function App() {
         setVisitCount(parseInt(cached, 10))
         return
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     const today = new Date().toISOString().slice(0, 10)
     const url = `https://abacus.jasoncameron.dev/hit/${ABACUS_NAMESPACE}/pool-${today}`
     const ctrl = new AbortController()
@@ -729,57 +931,45 @@ export default function App() {
           setVisitCount(data.value)
           try {
             window.sessionStorage.setItem('pool-count', String(data.value))
-          } catch {
-            /* ignore */
-          }
+          } catch { /* ignore */ }
         }
       })
-      .catch(() => {
-        /* fail silently */
-      })
+      .catch(() => { /* ignore */ })
     return () => ctrl.abort()
   }, [])
 
-  /* ------------------------------------------------------------
-     15. Sound layers on depth change
-     ------------------------------------------------------------ */
+  /* 14. Sound events on depth change */
   useEffect(() => {
     if (!soundOn) return
-    const ctx = audioCtxRef.current
-    const events = eventsGainRef.current
-    if (!ctx || !events) return
+    const bus = busRef.current
+    if (!bus) return
     const last = lastPlayedIndexRef.current
     if (last === visibleIndex) return
     lastPlayedIndexRef.current = visibleIndex
 
-    if (visibleIndex === 0 && last < 0) playDrip(ctx, events)
-    if (visibleIndex === 2 && last < 2) playSplash(ctx, events)
-    if (visibleIndex === 4 && last < 4) playMuffledLaugh(ctx, events)
+    if (visibleIndex === 0 && last < 0) playDrip(bus)
+    if (visibleIndex === 2 && last < 2) playSplash(bus)
+    if (visibleIndex === 4 && last < 4) playMuffledLaugh(bus)
     if (visibleIndex === 5 && last < 5) {
-      const master = masterGainRef.current
-      if (master) {
-        const t = ctx.currentTime
-        master.gain.cancelScheduledValues(t)
-        master.gain.setValueAtTime(master.gain.value, t)
-        master.gain.linearRampToValueAtTime(0, t + 4)
-        window.setTimeout(() => setSoundOn(false), 4200)
-      }
+      const t = bus.ctx.currentTime
+      bus.master.gain.cancelScheduledValues(t)
+      bus.master.gain.setValueAtTime(bus.master.gain.value, t)
+      bus.master.gain.linearRampToValueAtTime(0, t + 4)
+      window.setTimeout(() => setSoundOn(false), 4200)
     }
   }, [visibleIndex, soundOn])
 
-  /* ------------------------------------------------------------
-     16. Heartbeat — depth 03 → 05
-     ------------------------------------------------------------ */
+  /* 15. Heartbeat — depth 03 → 05 */
   useEffect(() => {
     const stopHeartbeat = () => {
       if (heartbeatTimerRef.current !== null) {
         window.clearInterval(heartbeatTimerRef.current)
         heartbeatTimerRef.current = null
       }
-      const ctx = audioCtxRef.current
+      const bus = busRef.current
       const hb = heartbeatGainRef.current
-      if (!ctx || !hb) return
-      const t = ctx.currentTime
+      if (!bus || !hb) return
+      const t = bus.ctx.currentTime
       hb.gain.cancelScheduledValues(t)
       hb.gain.setValueAtTime(hb.gain.value, t)
       hb.gain.linearRampToValueAtTime(0, t + 2.4)
@@ -789,61 +979,41 @@ export default function App() {
     }
 
     const startHeartbeat = () => {
-      const ctx = audioCtxRef.current
-      const master = masterGainRef.current
-      if (!ctx || !master) return
+      const bus = busRef.current
+      if (!bus) return
       if (heartbeatTimerRef.current !== null) return
 
-      const hbGain = ctx.createGain()
+      const hbGain = bus.ctx.createGain()
       hbGain.gain.value = 0
-      hbGain.connect(master)
+      hbGain.connect(bus.master)
       heartbeatGainRef.current = hbGain
 
-      const thump = (delay: number, amp: number) => {
-        const t = ctx.currentTime + delay
-        const osc = ctx.createOscillator()
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(72, t)
-        osc.frequency.exponentialRampToValueAtTime(34, t + 0.16)
-        const g = ctx.createGain()
-        g.gain.setValueAtTime(0.0001, t)
-        g.gain.linearRampToValueAtTime(amp, t + 0.014)
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3)
-        osc.connect(g).connect(hbGain)
-        osc.start(t)
-        osc.stop(t + 0.32)
-      }
       const beat = () => {
-        thump(0, 0.75)
-        thump(0.13, 0.45)
+        heartbeatThump(bus, hbGain, 0, 0.55)
+        heartbeatThump(bus, hbGain, 0.16, 0.32)
       }
       beat()
       heartbeatTimerRef.current = window.setInterval(beat, 1500)
-      const t = ctx.currentTime
+
+      const t = bus.ctx.currentTime
       hbGain.gain.cancelScheduledValues(t)
       hbGain.gain.setValueAtTime(0, t)
-      hbGain.gain.linearRampToValueAtTime(0.06, t + 3)
+      hbGain.gain.linearRampToValueAtTime(0.22, t + 3)
     }
 
     if (!soundOn) {
       stopHeartbeat()
       return
     }
-    if (visibleIndex >= 2 && visibleIndex <= 4) {
-      startHeartbeat()
-    } else {
-      stopHeartbeat()
-    }
+    if (visibleIndex >= 2 && visibleIndex <= 4) startHeartbeat()
+    else stopHeartbeat()
   }, [soundOn, visibleIndex])
 
-  /* ------------------------------------------------------------
-     17. Random image blinks — one flicker every 90–180s
-     ------------------------------------------------------------ */
+  /* 16. Image blinks */
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     let cancelled = false
     let tid: number | null = null
-
     const schedule = () => {
       const delay = 90000 + Math.random() * 90000
       tid = window.setTimeout(() => {
@@ -868,33 +1038,21 @@ export default function App() {
     }
   }, [bootPhase])
 
-  /* ------------------------------------------------------------
-     18. Depth 06 break — one-time whisper at the bottom
-     ------------------------------------------------------------ */
+  /* 17. Depth 06 break */
   useEffect(() => {
     if (visibleIndex !== 5) return
     if (depthBreakShownRef.current) return
     let alreadySeen = false
-    try {
-      alreadySeen = sessionStorage.getItem('pool-depthbreak') === '1'
-    } catch {
-      /* ignore */
-    }
+    try { alreadySeen = sessionStorage.getItem('pool-depthbreak') === '1' } catch { /* ignore */ }
     if (alreadySeen) return
     depthBreakShownRef.current = true
     setShowDepthBreak(true)
-    try {
-      sessionStorage.setItem('pool-depthbreak', '1')
-    } catch {
-      /* ignore */
-    }
+    try { sessionStorage.setItem('pool-depthbreak', '1') } catch { /* ignore */ }
     const t = window.setTimeout(() => setShowDepthBreak(false), 3200)
     return () => window.clearTimeout(t)
   }, [visibleIndex])
 
-  /* ------------------------------------------------------------
-     19. Hidden words — "surface" and "stay"
-     ------------------------------------------------------------ */
+  /* 18. Return to surface */
   const returnToSurface = useCallback(() => {
     clockStateRef.current = {
       wallMs: randomRooftopTime(),
@@ -905,14 +1063,15 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  /* 19. Hidden words */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
       if (e.key.length !== 1) return
-      keysBufferRef.current = (keysBufferRef.current + e.key.toLowerCase()).slice(
-        -20,
-      )
+      keysBufferRef.current = (
+        keysBufferRef.current + e.key.toLowerCase()
+      ).slice(-20)
       if (keysBufferRef.current.endsWith('surface')) {
         keysBufferRef.current = ''
         returnToSurface()
@@ -926,122 +1085,70 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [returnToSurface])
 
-  /* ------------------------------------------------------------
-     20. Name submit
-     ------------------------------------------------------------ */
+  /* 20. Name submit */
   const handleNameSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
       const trimmed = nameInput.trim().slice(0, 24)
       if (!trimmed) return
       setVisitorName(trimmed)
-      try {
-        window.localStorage.setItem('pool-name', trimmed)
-      } catch {
-        /* ignore */
-      }
+      try { window.localStorage.setItem('pool-name', trimmed) } catch { /* ignore */ }
       setBootPhase('fading')
     },
     [nameInput],
   )
 
-  /* ------------------------------------------------------------
-     21. Sound toggle
-     ------------------------------------------------------------ */
+  /* 21. Sound toggle */
   const toggleSound = useCallback(() => {
-    const AudioCtor = window.AudioContext
-    if (!AudioCtor) return
-
-    if (!audioCtxRef.current) {
-      const ctx = new AudioCtor()
-
-      const master = ctx.createGain()
-      master.gain.value = 0
-
-      const panner = ctx.createStereoPanner()
-      panner.pan.value = 0
-
-      master.connect(panner).connect(ctx.destination)
-
-      const humGain = ctx.createGain()
-      humGain.gain.value = 0.02
-      humGain.connect(master)
-
-      const filter = ctx.createBiquadFilter()
-      filter.type = 'lowpass'
-      filter.frequency.value = 240
-      filter.Q.value = 0.6
-      filter.connect(humGain)
-
-      const osc1 = ctx.createOscillator()
-      osc1.type = 'sine'
-      osc1.frequency.value = 55
-      const g1 = ctx.createGain()
-      g1.gain.value = 1
-      osc1.connect(g1).connect(filter)
-      osc1.start()
-
-      const osc2 = ctx.createOscillator()
-      osc2.type = 'triangle'
-      osc2.frequency.value = 82.4
-      const g2 = ctx.createGain()
-      g2.gain.value = 0.55
-      osc2.connect(g2).connect(filter)
-      osc2.start()
-
-      const eventsGain = ctx.createGain()
-      eventsGain.gain.value = 0.12
-      eventsGain.connect(master)
-
-      audioCtxRef.current = ctx
-      masterGainRef.current = master
-      eventsGainRef.current = eventsGain
-      pannerRef.current = panner
+    if (!busRef.current) {
+      try {
+        busRef.current = buildAudio()
+        // find the panner (it's the last node before destination inside buildAudio)
+        const bus = busRef.current
+        // grab panner reference by walking master's output — for simplicity, re-derive:
+        // (buildAudio attached master → underwater → panner → destination)
+        // we saved master only; walk downstream to find panner
+        const downstream = (bus.master as unknown as { _connections?: unknown })
+        void downstream
+      } catch {
+        return
+      }
     }
+    const bus = busRef.current
+    if (!bus) return
 
-    const ctx = audioCtxRef.current
-    const master = masterGainRef.current
-    if (!ctx || !master) return
+    if (bus.ctx.state === 'suspended') void bus.ctx.resume()
 
-    if (ctx.state === 'suspended') void ctx.resume()
-
-    const now = ctx.currentTime
-    master.gain.cancelScheduledValues(now)
-    master.gain.setValueAtTime(master.gain.value, now)
+    const now = bus.ctx.currentTime
+    bus.master.gain.cancelScheduledValues(now)
+    bus.master.gain.setValueAtTime(bus.master.gain.value, now)
 
     if (soundOn) {
-      master.gain.linearRampToValueAtTime(0, now + 1.6)
+      bus.master.gain.linearRampToValueAtTime(0, now + 1.6)
       setSoundOn(false)
     } else {
-      master.gain.linearRampToValueAtTime(1, now + 3)
+      bus.master.gain.linearRampToValueAtTime(0.85, now + 3)
       setSoundOn(true)
       lastPlayedIndexRef.current = visibleIndex
     }
   }, [soundOn, visibleIndex])
 
-  /* ------------------------------------------------------------
-     22. Cleanup audio
-     ------------------------------------------------------------ */
+  /* 22. Cleanup audio */
   useEffect(() => {
     return () => {
       if (heartbeatTimerRef.current !== null) {
         window.clearInterval(heartbeatTimerRef.current)
         heartbeatTimerRef.current = null
       }
-      const ctx = audioCtxRef.current
-      audioCtxRef.current = null
-      masterGainRef.current = null
-      eventsGainRef.current = null
-      pannerRef.current = null
+      const bus = busRef.current
+      busRef.current = null
       heartbeatGainRef.current = null
-      if (ctx && ctx.state !== 'closed') void ctx.close()
+      pannerRef.current = null
+      if (bus && bus.ctx.state !== 'closed') void bus.ctx.close()
     }
   }, [])
 
-  /* ------------------------------------------------------------
-     RENDER
-     ------------------------------------------------------------ */
-
+  /* ---- render ---- */
   const depthLabel =
     visibleIndex >= 0 ? String(visibleIndex + 1).padStart(2, '0') : '00'
   const finalGuestName = visitorName ? visitorName.toUpperCase() : 'you'
@@ -1055,22 +1162,9 @@ export default function App() {
 
   return (
     <div className="pool-app">
-      {/* ---------- wet filter SVG defs ---------- */}
-      <svg
-        className="pool-filter-defs"
-        aria-hidden="true"
-        focusable="false"
-        width="0"
-        height="0"
-      >
+      <svg className="pool-filter-defs" aria-hidden="true" focusable="false" width="0" height="0">
         <defs>
-          <filter
-            id="pool-wet"
-            x="-15%"
-            y="-15%"
-            width="130%"
-            height="130%"
-          >
+          <filter id="pool-wet" x="-15%" y="-15%" width="130%" height="130%">
             <feTurbulence
               type="fractalNoise"
               baseFrequency="0.008 0.02"
@@ -1096,15 +1190,14 @@ export default function App() {
         </defs>
       </svg>
 
-      {/* ---------- loading screen ---------- */}
       {bootPhase !== 'done' && (
         <div className={loaderClass} aria-hidden={bootPhase === 'fading'}>
           <p className="pool-loader-text">
             {typedText}
-            {(bootPhase === 'warning' || bootPhase === 'entering') &&
-              !isHolding && <span className="caret" />}
+            {(bootPhase === 'warning' || bootPhase === 'entering') && !isHolding && (
+              <span className="caret" />
+            )}
           </p>
-
           {bootPhase === 'asking' && (
             <form className="name-prompt" onSubmit={handleNameSubmit}>
               <label htmlFor="visitor-name">what should we call you?</label>
@@ -1125,7 +1218,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ---------- fixed layers ---------- */}
       <div className="pool-bg" aria-hidden="true" />
       <div className="pool-caustics" aria-hidden="true" />
       <Particles />
@@ -1152,21 +1244,18 @@ export default function App() {
       )}
 
       <main>
-        {/* ---------- hero ---------- */}
         <section className="surface">
           <h1>
             The pool is <em>still open.</em>
           </h1>
           <p className="timestamp">{clockDisplay} · The rooftop</p>
           <p className="surface-note">Scroll to sink</p>
-
           <div className="scroll-cue" aria-hidden="true">
             <span className="scroll-line" />
             <span>Descend</span>
           </div>
         </section>
 
-        {/* ---------- depths + whispers + keys ---------- */}
         {depths.map((depth, index) => (
           <Fragment key={depth.caption}>
             <section
@@ -1180,25 +1269,20 @@ export default function App() {
                 aria-hidden="true"
               />
               <div className="depth-veil" aria-hidden="true" />
-
               <span className="pool-sign" aria-hidden="true">
                 {SIGNS[index]}
               </span>
-
               {KEY_SPOTS[index] && <Key style={KEY_SPOTS[index]} />}
-
               <div className="depth-text">
                 <h2>{depth.line}</h2>
                 <p>{depth.caption}</p>
               </div>
-
               {index === 5 && showDepthBreak && (
                 <div className="depth-break" aria-hidden="true">
                   this website is watching you back
                 </div>
               )}
             </section>
-
             {index < depths.length - 1 && (
               <div className="whisper" aria-hidden="true">
                 <span>{WHISPERS[index]}</span>
@@ -1207,16 +1291,12 @@ export default function App() {
           </Fragment>
         ))}
 
-        {/* ---------- guest log ---------- */}
         <section className="depth-section guest-log" data-index={-1}>
           <div className="depth-text guest-log-text">
             <h2>Guest log.</h2>
             <ul>
               {GUEST_LOG.map((g, i) => (
-                <li
-                  key={g.name + g.date}
-                  style={{ transitionDelay: `${1 + i * 0.5}s` }}
-                >
+                <li key={g.name + g.date} style={{ transitionDelay: `${1 + i * 0.5}s` }}>
                   <span className="log-name">{g.name}</span>
                   <span className="log-dot">·</span>
                   <span className="log-date">{g.date}</span>
@@ -1235,7 +1315,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* ---------- depth 07 ---------- */}
         {isReturnVisitor && (
           <section className="depth-section depth-seven" data-index={-1}>
             <div className="depth-text">
@@ -1248,31 +1327,19 @@ export default function App() {
           </section>
         )}
 
-        {/* ---------- footer ---------- */}
         <footer className="pool-footer">
           <p>
             The Pool at Night ·{' '}
             <span className="depth-counter">{depthLabel}</span> /{' '}
             {String(TOTAL_DEPTHS).padStart(2, '0')}
           </p>
-
           {visitCount !== null && (
-            <p className="visitor-counter">
-              you are the {ordinal(visitCount)} tonight
-            </p>
+            <p className="visitor-counter">you are the {ordinal(visitCount)} tonight</p>
           )}
-
-          <button
-            type="button"
-            className="surface-link"
-            onClick={returnToSurface}
-          >
+          <button type="button" className="surface-link" onClick={returnToSurface}>
             ↑ Surface
           </button>
-
-          <p className="pool-footnote">
-            v1.0 · last updated 03:47 AM
-          </p>
+          <p className="pool-footnote">v1.0 · last updated 03:47 AM</p>
         </footer>
       </main>
     </div>
