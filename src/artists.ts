@@ -189,10 +189,10 @@ export const whispers = [
 export const POOL = {
   /** shown in the footer submit link */
   submitUrl:
-    'https://github.com/YOUR-USERNAME/the-pool-at-night/issues/new?template=artist-submission.yml',
+    'https://github.com/amirbettir4-hub/the-pool-at-night/issues/new?template=artist-submission.yml',
   /** the communal space — GitHub Discussions, Discord, whatever */
   deepEndUrl:
-    'https://github.com/YOUR-USERNAME/the-pool-at-night/discussions',
+    'https://github.com/amirbettir4-hub/the-pool-at-night/discussions',
   /** total depths shown */
   totalDepths: 6,
 }
