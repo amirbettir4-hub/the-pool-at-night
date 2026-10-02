@@ -1,0 +1,84 @@
+name: Submit your work to the pool
+description: Leave a piece in the deep end. If it fits, it goes in.
+title: "[SUBMISSION] your name"
+labels: ["submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Welcome to the deep end.
+        Fill this in. If it fits the room, it goes up.
+        You'll be credited exactly as you write it here.
+
+  - type: input
+    id: name
+    attributes:
+      label: Your name
+      description: How you want to be credited.
+      placeholder: Mira Chen
+    validations:
+      required: true
+
+  - type: input
+    id: handle
+    attributes:
+      label: Handle
+      description: Instagram, X, personal site — whichever you want shown.
+      placeholder: "@mirachen"
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Link
+      description: Full URL to your portfolio, Instagram, or where the work lives.
+      placeholder: "https://instagram.com/mirachen"
+    validations:
+      required: true
+
+  - type: input
+    id: city
+    attributes:
+      label: City
+      placeholder: Shanghai
+    validations:
+      required: false
+
+  - type: input
+    id: medium
+    attributes:
+      label: Medium
+      description: photography, painting, sound, code, text, sculpture, etc.
+      placeholder: photography
+    validations:
+      required: true
+
+  - type: textarea
+    id: note
+    attributes:
+      label: One line about the work
+      description: A single sentence, in your own voice. This will appear under the pool's headline.
+      placeholder: an empty pool, taken at 03:47 — the tiles were still warm
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: image
+    attributes:
+      label: Image URL
+      description: A direct link to the image. If you don't have one, upload it in a comment after creating this issue.
+      placeholder: https://...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: affirm
+    attributes:
+      label: Before you submit
+      options:
+        - label: This is my own work, or I have permission to share it.
+          required: true
+        - label: I understand the pool may curate or rotate works out.
+          required: true
