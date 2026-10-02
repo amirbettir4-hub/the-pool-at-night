@@ -82,19 +82,19 @@ export const slots: Slot[] = [
       since: '2024',
     },
   },
-  {
+    {
     poolLine: 'Someone left the door open.',
     poolCaption: "Depth 04 · You've been here before",
     artist: {
-      name: 'Kai Ono',
-      handle: '@kaiono',
-      url: 'https://example.com/kaiono',
-      city: 'Tokyo',
+      name: 'Amir B.',
+      handle: '@amirbettir4-hub',
+      url: 'https://github.com/amirbettir4-hub',
+      city: 'Algiers',
       medium: 'code',
-      note: 'a small program that remembers every visitor, then forgets',
+      note: 'I built a pool you can drown in.',
       image:
         'https://images.unsplash.com/photo-1518877593221-1f28583780b4?auto=format&fit=crop&w=2200&q=85',
-      since: '2024',
+      since: '2025',
     },
   },
   {
